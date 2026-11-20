@@ -1,0 +1,21 @@
+data/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+node_modules/
+*.log
+*.db
+*.db-*
+*.sqlite*
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+
+# Local browser sessions and one-off data migration/demo scripts.
+scripts/*
+!scripts/check_*.mjs

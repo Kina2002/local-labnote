@@ -1,0 +1,263 @@
+let books = [];
+let selectedBookId = null;
+let archiveReturnBookId = null;
+
+function currentBook() {
+  return books.find(book => book.id === selectedBookId);
+}
+
+function visibleExperiments() {
+  return selectedBookId ? filterContentsRecords(selectedBookId) : [];
+}
+
+async function refreshShelf() {
+  books = await api('/api/notebooks');
+  if (selectedBookId && !currentBook()) selectedBookId = null;
+  renderBookNav();
+  renderShelf();
+  if (selectedBookId && !current) renderBookHome();
+  if (!selectedBookId && !current) showShelf();
+}
+
+function renderBookNav() {
+  syncContentsBook();
+  const nav = $('book-nav');
+  nav.innerHTML = '';
+  for (const book of books) {
+    const button = document.createElement('button');
+    button.className = 'book-nav-item' + (book.id === selectedBookId ? ' active' : '');
+    button.innerHTML = `<span class="book-nav-icon">▤</span><span class="book-nav-title">${escapeHtml(book.title)}</span><small>${book.experiment_count}</small>`;
+    button.onclick = () => showBook(book.id);
+    nav.append(button);
+  }
+  $('contents-heading').textContent = currentBook() ? '이 책의 실험' : '실험 목차';
+}
+
+function renderShelf() {
+  const box = $('shelf-books');
+  box.innerHTML = '';
+  for (const book of books) {
+    const button = document.createElement('button');
+    button.className = 'shelf-book';
+    button.innerHTML = `<span class="shelf-book-mark">✳</span><span class="shelf-book-title">${escapeHtml(book.title)}</span><span class="shelf-book-count">기록 ${book.experiment_count}개</span>`;
+    button.onclick = () => showBook(book.id);
+    box.append(button);
+  }
+}
+
+function showShelf() {
+  selectedBookId = null;
+  current = null;
+  $('shelf').classList.remove('hidden');
+  $('book-home').classList.add('hidden');
+  $('welcome').classList.add('hidden');
+  $('notebook').classList.add('hidden');
+  $('top-status').textContent = '책을 선택해 주세요';
+  renderBookNav();
+  renderSidebar();
+}
+
+function renderBookHome() {
+  const book = currentBook();
+  if (!book) return showShelf();
+  $('book-title').textContent = book.title;
+  $('book-overview').textContent = book.overview || '';
+  $('book-overview').classList.toggle('hidden', !book.overview);
+  $('book-count').textContent = `기록 ${book.experiment_count}개`;
+  const source = $('book-source');
+  source.classList.toggle('hidden', !book.source_url);
+  if (book.source_url) source.href = book.source_url;
+  const list = $('book-experiments');
+  list.innerHTML = '';
+  const shown = visibleExperiments();
+  const pagination=paginateContents(shown,bookContentsPage);
+  bookContentsPage=pagination.page;
+  if (!shown.length) {
+    const empty=document.createElement('p');empty.className='book-empty';empty.textContent=contentsEmptyMessage();list.append(empty);
+  } else {
+    for (const exp of pagination.records) {
+      const row=makeExperimentLink(exp);row.title=`${recordNumber(exp)} · ${exp.title}`;list.append(row);
+    }
+  }
+  $('book-list-summary').textContent=contentsSearching?'검색 중…':contentsSearchError?'검색 오류':shown.length?`${contentsQuery?'검색 결과':'전체'} ${shown.length}개 · ${pagination.start+1}–${pagination.start+pagination.records.length}번째 표시`:'표시할 실험이 없습니다.';
+  $('book-pagination').hidden=!shown.length||contentsSearching||Boolean(contentsSearchError);
+  $('book-previous-page').disabled=bookContentsPage===1;
+  $('book-next-page').disabled=bookContentsPage===pagination.count;
+  const numbers=$('book-page-numbers');numbers.innerHTML='';
+  const first=Math.max(1,Math.min(bookContentsPage-2,pagination.count-4));
+  const pages=new Set([1,pagination.count]);
+  for(let number=first;number<=Math.min(pagination.count,first+4);number++)pages.add(number);
+  let previous=0;
+  for(const number of [...pages].sort((a,b)=>a-b)){
+    if(previous&&number-previous>1){const gap=document.createElement('span');gap.textContent='…';numbers.append(gap)}
+    const button=document.createElement('button');button.type='button';button.textContent=number;button.setAttribute('aria-label',`목차 ${number}페이지`);
+    if(number===bookContentsPage)button.setAttribute('aria-current','page');
+    button.onclick=()=>changeBookContentsPage(number);numbers.append(button);previous=number;
+  }
+}
+
+function changeBookContentsPage(page){
+  bookContentsPage=paginateContents(visibleExperiments(),page).page;
+  renderBookHome();document.querySelector('.book-contents').scrollIntoView({block:'start'});
+}
+
+function showBook(id) {
+  selectedBookId = id;
+  syncContentsBook();
+  current = null;
+  $('shelf').classList.add('hidden');
+  $('book-home').classList.remove('hidden');
+  $('welcome').classList.add('hidden');
+  $('notebook').classList.add('hidden');
+  $('top-status').textContent = currentBook()?.title || '';
+  renderBookHome();
+  renderBookNav();
+  renderSidebar();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  $('open-archive').onclick = () => showArchive();
+  $('archive-record').onclick = async () => {
+    if (!current || current.archived) return;
+    const id = current.id, bookId = current.notebook_id;
+    $('archive-record').disabled = true;
+    try {
+      await persistRecordEdits();
+      await api(`/api/experiments/${id}/archive`, 'POST', {});
+      if (current?.id === id) showBook(bookId);
+      await refreshList();
+      toast('보관했습니다. 왼쪽 보관한 기록에서 다시 볼 수 있어요.');
+    } catch(error) { toast(error.message); }
+    finally { $('archive-record').disabled = false; }
+  };
+  $('close-record').onclick = async () => {
+    if (!current) return;
+    const id = current.id, bookId = current.notebook_id, archived = Boolean(current.archived);
+    try {
+      if (!archived) await persistRecordEdits();
+      if (current?.id !== id) return;
+      if (archived) {
+        if (archiveReturnBookId) showBook(archiveReturnBookId); else showShelf();
+        await showArchive(archiveReturnBookId);
+      } else { await refreshList(); showBook(bookId); }
+    } catch(error) { toast(error.message); }
+  };
+  $('close-archive').onclick = () => $('archive-dialog').close();
+  $('restore-record').onclick = async () => {
+    if (!current?.archived) return;
+    const id = current.id;
+    $('restore-record').disabled = true;
+    try {
+      await api(`/api/experiments/${id}/restore`, 'POST', {});
+      await refreshList();
+      await openExperiment(id);
+      toast('기록을 목록으로 복원했습니다.');
+    } catch(error) { toast(error.message); }
+    finally { $('restore-record').disabled = false; }
+  };
+  $('repeat-experiment').onclick = async () => {
+    if (!current) return;
+    const id = current.id;
+    try {
+      await saveQueue;
+      const entry = await api(`/api/experiments/${id}/repeat`, 'POST', {});
+      await refreshList();
+      await openExperiment(entry.id);
+      toast('새 회차를 만들었습니다. 실제 수행 조건과 날짜를 확인해 주세요.');
+    } catch (error) { toast(error.message); }
+  };
+  $('open-shelf').onclick = showShelf;
+  $('crumb-book').onclick = () => showBook(selectedBookId);
+  $('new-book').onclick = () => {
+    $('new-book-title').value = '';
+    $('new-book-source').value = '';
+    $('book-dialog').showModal();
+  };
+  $('book-new-experiment').onclick = () => openCreate();
+  $('book-dialog').addEventListener('close', async () => {
+    if ($('book-dialog').returnValue !== 'create') return;
+    try {
+      const book = await api('/api/notebooks', 'POST', {
+        title: $('new-book-title').value,
+        source_url: $('new-book-source').value.trim(),
+      });
+      await refreshShelf();
+      showBook(book.id);
+      toast('새 책을 만들었습니다.');
+    } catch (error) {
+      toast(error.message);
+    }
+  });
+});
+
+function updateRecordHeader() {
+  const literature = current.record_type === 'literature';
+  const archived = Boolean(current.archived);
+  $('experiment-date').disabled = literature || archived;
+  $('experiment-title').readOnly = archived;
+  $('open-tools').disabled = archived;
+  $('open-tools').classList.toggle('hidden', archived);
+  $('restore-record').classList.toggle('hidden', !archived);
+  $('archive-record').classList.toggle('hidden', archived);
+  $('repeat-experiment').classList.toggle('hidden', archived);
+  for(const textarea of document.querySelectorAll('#sections textarea')) textarea.readOnly = archived;
+  for(const button of document.querySelectorAll('#sections .add-file, #sections .lock-button')) button.disabled = archived;
+  document.querySelector('label[for="experiment-date"]').textContent = literature ? '수행일 (원문 미상)' : '실험 날짜';
+  document.querySelector('.page-header .eyebrow').textContent = literature ? 'LITERATURE RECONSTRUCTION' : 'EXPERIMENT RECORD';
+  let siblings = $('record-siblings');
+  if (!siblings) { siblings=document.createElement('div'); siblings.id='record-siblings'; $('repeat-experiment').after(siblings); }
+  siblings.innerHTML='';
+  const related=experiments.filter(e=>e.series_id===current.series_id);
+  if(related.length>1) for(const entry of related){
+    const button=document.createElement('button'); button.className='subtle-button';
+    button.textContent=entry.record_type==='literature'?'참고한 문헌 조건':`${entry.run_number}회차`;
+    button.disabled=entry.id===current.id; button.onclick=()=>openExperiment(entry.id); siblings.append(button);
+  }
+  $('record-context').textContent = literature
+    ? '문헌 재구성 · 직접 수행한 실험이 아닙니다. 논문에 개별 수행일과 반복 회차가 없어 미상으로 표시합니다. 방법·관찰·해석의 출처를 각 항목에서 확인하세요.'
+    : `${current.run_number || 1}회차 · ${current.record_type === 'plan' ? '새 회차 초안입니다. 이전 기록의 목적·방법·참고 자료만 가져왔습니다. 실제 수행 날짜와 조건을 확인하고 관찰·결과를 새로 기록하세요.' : '이번 수행의 조건·시간·관찰·결과를 기록하세요. 반복 수행은 별도 회차로 만듭니다.'}`;
+  $('repeat-experiment').textContent = literature ? '이 조건으로 새 실험 기록' : '다음 회차 기록';
+  if (archived) {
+    document.querySelector('label[for="experiment-date"]').textContent = '기존 기록의 날짜';
+    $('top-status').textContent = `${recordNumber(current)} · 보관된 기록`;
+    $('record-context').textContent = '보관된 기록 · 내용과 첨부파일을 확인할 수 있습니다. 복원하면 다시 목록에 표시되고 수정할 수 있습니다. 오른쪽 위 닫기를 누르면 보관 목록으로 돌아갑니다.';
+    document.querySelector('.page-header .eyebrow').textContent = 'ARCHIVED RECORD';
+    $('record-siblings').innerHTML = '';
+  }
+}
+
+async function showArchive(scope = selectedBookId) {
+  try {
+    const all = await api('/api/archived-experiments');
+    const records = scope ? all.filter(e=>e.notebook_id===scope) : all;
+    $('archive-scope').textContent = `${books.find(b=>b.id===scope)?.title || '전체 책'} · ${records.length}개. 기록을 선택하면 내용과 첨부파일을 볼 수 있습니다.`;
+    const list = $('archive-list');
+    list.innerHTML = '';
+    if (!records.length) list.textContent = '보관한 기록이 없습니다.';
+    for (const record of records) {
+      const button = makeExperimentLink(record);
+      button.querySelector('.list-date').textContent = '보관된 기록 · 열어서 확인';
+      button.onclick = async () => { archiveReturnBookId = scope; $('archive-dialog').close(); await openExperiment(record.id); };
+      list.append(button);
+    }
+    $('archive-dialog').showModal();
+  } catch(error) { toast(error.message); }
+}
+
+async function persistRecordEdits() {
+  if (!current || current.archived) return;
+  const id = current.id;
+  const title = $('experiment-title').value.trim() || current.title;
+  const date = $('experiment-date').value;
+  const contents = [...document.querySelectorAll('#sections textarea')].map(el=>el.value);
+  await saveQueue;
+  if (current?.id !== id) throw new Error('열린 기록이 바뀌었습니다. 다시 시도해 주세요.');
+  for (const [index,key] of Object.keys(labels).entries()) {
+    if(contents[index] !== current.sections[key].content) {
+      current = await api(`/api/experiments/${id}/sections/${key}`, 'POST', {content:contents[index]});
+    }
+  }
+  if(title !== current.title || date !== current.experiment_date) {
+    current = await api(`/api/experiments/${id}`, 'POST', {title, experiment_date:date});
+  }
+}

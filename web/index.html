@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>연구노트 · 내 컴퓨터의 실험 기록</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/book.css">
+</head>
+<body>
+  <div id="app" data-token="__SESSION_TOKEN__">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">✳</span><div><strong>연구노트</strong><small>내 컴퓨터의 실험 기록</small></div></div>
+      <button id="open-shelf" class="shelf-nav">▦ &nbsp; 내 책장</button>
+      <div id="book-nav" class="book-nav"></div>
+      <button id="open-archive" class="archive-nav">보관한 기록</button>
+      <div class="side-heading"><span id="contents-heading">실험 목차</span><button id="new-experiment" class="icon-button dark" title="새 실험" aria-label="새 실험">＋</button></div>
+      <div class="contents-controls">
+        <div class="contents-search-wrap"><input id="contents-search" type="search" maxlength="200" placeholder="날짜·제목·본문 검색" aria-label="실험 날짜, 제목, 본문 검색" title="예: 2026-11-20, 2026.11, 코팅, 실온. 저장된 본문을 이 컴퓨터에서 검색합니다."><button id="clear-contents-search" type="button" aria-label="검색 지우기" hidden>×</button></div>
+        <select id="contents-sort" aria-label="실험 정렬 순서"><option value="number-asc">실험 번호 낮은 순</option><option value="number-desc">실험 번호 높은 순</option><option value="date-desc">실험 날짜 최신순</option><option value="date-asc">실험 날짜 오래된 순</option><option value="title-asc">제목 가나다순</option><option value="title-desc">제목 역순</option></select>
+        <small id="contents-results" role="status" aria-live="polite"></small>
+      </div>
+      <div class="view-switch"><button id="timeline-tab" class="active">목록</button><button id="calendar-tab">달력</button></div>
+      <div id="sidebar-content" class="sidebar-content"></div>
+      <div class="side-footer"><span class="local-dot"></span> 로컬 저장 <span class="side-footer-sub">· 외부 AI 연결 없음</span></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar"><span>RESEARCH JOURNAL</span><span id="top-status">실험을 선택해 주세요</span></div>
+      <div id="shelf" class="shelf-view">
+        <div class="shelf-header"><div><p class="eyebrow">MY RESEARCH LIBRARY</p><h1>내 책장</h1><p>연구 주제나 논문마다 책을 만들고, 그 안에 실험을 기록하세요.</p></div><button id="new-book" class="primary-button">＋ 새 책</button></div>
+        <div id="shelf-books" class="shelf-books"></div>
+      </div>
+      <div id="book-home" class="book-home hidden">
+        <div class="book-cover paper"><p class="eyebrow">RESEARCH NOTEBOOK</p><h1 id="book-title"></h1><p id="book-count"></p><a id="book-source" class="book-source hidden" target="_blank" rel="noopener noreferrer">출처 열기 ↗</a></div>
+        <p id="book-overview" class="book-overview"></p>
+        <div class="book-contents">
+          <div class="book-contents-head"><h2>실험 목차</h2><button id="book-new-experiment" class="primary-button">＋ 새 실험</button></div>
+          <div class="book-contents-controls">
+            <div class="contents-search-wrap"><input id="book-contents-search" type="search" maxlength="200" placeholder="날짜·제목·본문 검색" aria-label="이 책 목차 검색"><button id="clear-book-contents-search" type="button" aria-label="목차 검색 지우기" hidden>×</button></div>
+            <select id="book-contents-sort" aria-label="이 책 목차 정렬 순서"></select>
+          </div>
+          <p id="book-list-summary" class="book-list-summary" role="status" aria-live="polite"></p>
+          <div id="book-experiments"></div>
+          <nav id="book-pagination" class="book-pagination" aria-label="실험 목차 페이지">
+            <button id="book-previous-page" type="button" aria-label="목차 이전 페이지">← 이전</button>
+            <div id="book-page-numbers"></div>
+            <button id="book-next-page" type="button" aria-label="목차 다음 페이지">다음 →</button>
+          </nav>
+        </div>
+      </div>
+      <div id="welcome" class="welcome paper">
+        <div class="welcome-symbol">✳</div>
+        <p class="eyebrow">YOUR PRIVATE RESEARCH SPACE</p>
+        <h1>기록에서<br>발견으로.</h1>
+        <p>실험을 남기고, 데이터를 살펴보고, 다음 질문을 찾아보세요.<br>AI가 읽을 수 있는 내용은 항목마다 직접 정합니다.</p>
+        <button id="welcome-new" class="primary-button">첫 실험 기록하기 <span>↗</span></button>
+        <div class="welcome-foot">노트와 첨부파일은 이 컴퓨터에 저장됩니다.</div>
+      </div>
+
+      <div id="notebook" class="notebook hidden">
+        <div class="notebook-toolbar"><span class="breadcrumb"><button id="crumb-book" class="crumb-book"></button> <span>／</span> <b id="crumb-number"></b></span><div class="record-actions"><button id="archive-record" class="subtle-button">보관하기</button><button id="open-tools" class="tool-button">✳ AI 도움</button><button id="close-record" class="subtle-button" aria-label="기록 닫기">닫기 ×</button></div></div>
+        <article class="open-book">
+        <div class="book-leaf contents-leaf">
+          <div class="leaf-running-head">RESEARCH NOTEBOOK <span>목차</span></div>
+          <header class="page-header">
+            <div><p class="eyebrow">EXPERIMENT RECORD</p><h1 id="experiment-number"></h1></div>
+            <div class="page-date-wrap"><label for="experiment-date">실험 날짜</label><input id="experiment-date" type="date"></div>
+          </header>
+          <textarea id="experiment-title" class="title-input" aria-label="실험 제목" maxlength="160" placeholder="실험 제목" rows="3"></textarea>
+          <p id="record-context" class="notice"></p><button id="restore-record" class="primary-button hidden">이 기록 복원</button><button id="repeat-experiment" class="subtle-button">다음 회차 기록</button>
+          <nav id="page-contents" class="page-contents" aria-label="실험 기록 목차"></nav>
+          <p class="page-intro">항목마다 AI 접근을 따로 정할 수 있어요.<br>🔒 AI 사용 금지 &nbsp; 🏠 로컬 AI 허용</p>
+          <div class="leaf-footer"><span>실험 기록</span><span>목차</span></div>
+        </div>
+        <div class="book-leaf writing-leaf">
+          <div class="leaf-running-head"><span id="page-running-title">실험 기록</span><span id="page-position"></span></div>
+          <div id="sections"></div>
+          <nav class="page-navigation" aria-label="검색 결과와 선택한 정렬 순서로 실험 이동"><button id="previous-page" class="text-button" aria-label="이전 실험">← 이전 실험</button><span id="page-folio"></span><button id="next-page" class="text-button" aria-label="다음 실험">다음 실험 →</button></nav>
+          <div class="record-foot"><span id="updated-at"></span><button id="show-history" class="text-button">수정 기록 보기</button></div>
+        </div>
+        </article>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="create-dialog" class="modal"><form method="dialog"><div class="modal-head"><p class="eyebrow">NEW EXPERIMENT</p><button class="close-button" value="cancel" formnovalidate aria-label="닫기">×</button></div><h2>새 실험 기록</h2><label>실험 제목<input id="new-title" maxlength="160" placeholder="예: 온도별 코팅 강도 비교" required></label><label>실험 날짜<input id="new-date" type="date" required></label><div class="modal-actions"><button value="cancel" formnovalidate class="subtle-button">취소</button><button id="create-save" value="create" class="primary-button">기록 시작</button></div></form></dialog>
+
+  <dialog id="book-dialog" class="modal"><form method="dialog"><div class="modal-head"><p class="eyebrow">NEW BOOK</p><button class="close-button" value="cancel" formnovalidate aria-label="닫기">×</button></div><h2>새 책 만들기</h2><label>책 이름<input id="new-book-title" maxlength="160" placeholder="예: 수계 코팅 연구 / 읽고 있는 논문" required></label><label>논문·자료 주소 (선택)<input id="new-book-source" type="url" placeholder="https://..."></label><div class="modal-actions"><button value="cancel" formnovalidate class="subtle-button">취소</button><button value="create" class="primary-button">책 만들기</button></div></form></dialog>
+
+  <dialog id="tools-dialog" class="tools-modal"><div class="tools-header"><div><p class="eyebrow">RESEARCH ASSISTANT</p><h2>AI 도움</h2></div><button id="close-tools" class="close-button" aria-label="닫기">×</button></div><div class="tools-tabs"><button id="analysis-tab" class="active">실험 분석</button><button id="papers-tab">논문 찾기</button></div><div id="analysis-panel" class="tools-body"><div class="notice">🏠 허용한 항목만 로컬 AI에 전달합니다. 🔒 항목은 요청에서 제외됩니다.</div><div id="ai-preview" class="preview-box"></div><label for="ai-question">AI에게 묻기</label><textarea id="ai-question" rows="3" placeholder="예: 결과에서 보이는 변화와 추가 확인할 점을 알려줘"></textarea><button id="run-analysis" class="primary-button">허용한 항목으로 분석</button><div id="ai-answer" class="tool-result"></div></div><div id="papers-panel" class="tools-body hidden"><div class="notice">검색어만 Crossref에 전송합니다. 실험 기록과 첨부파일은 보내지 않습니다.</div><label for="paper-query">검색어</label><input id="paper-query" placeholder="예: waterborne polyurethane coating tensile strength"><button id="run-search" class="primary-button">검색어 확인하고 찾기</button><div id="paper-results" class="tool-result"></div></div></dialog>
+
+  <dialog id="history-dialog" class="modal"><div class="modal-head"><p class="eyebrow">RECORD HISTORY</p><button id="close-history" class="close-button" aria-label="닫기">×</button></div><h2>최근 수정 기록</h2><div id="history-list"></div><p class="small-note">이 목록은 최근 변경을 보여주는 편의 기능입니다. 공식 증빙용 감사 기록은 아닙니다.</p></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="image-dialog" class="image-dialog" aria-labelledby="image-dialog-title">
+    <form method="dialog" class="image-dialog-header"><h2 id="image-dialog-title"></h2><button class="subtle-button" aria-label="사진 닫고 기록으로 돌아가기" autofocus>닫기 ×</button></form>
+    <div class="image-zoom-controls" role="group" aria-label="사진 확대와 축소">
+      <button id="image-zoom-out" type="button" class="subtle-button" aria-label="사진 축소">−</button>
+      <output id="image-zoom-level" aria-live="polite" aria-label="확대 비율">—</output>
+      <button id="image-zoom-in" type="button" class="subtle-button" aria-label="사진 확대">＋</button>
+      <button id="image-actual-size" type="button" class="subtle-button">원본 크기</button>
+      <button id="image-fit" type="button" class="subtle-button">화면에 맞춤</button>
+      <button id="image-annotate" type="button" class="subtle-button">화살표·설명 넣기</button>
+    </div>
+    <div id="image-viewport" class="image-dialog-body" tabindex="0" role="region" aria-label="확대 사진, 마우스로 끌어서 이동"><div id="image-stage"><div id="image-content"><img id="enlarged-image" alt="" draggable="false"></div></div></div>
+    <p class="image-dialog-hint">휠로 확대·축소 · 사진을 끌어서 이동 · Esc로 닫기</p>
+  </dialog>
+  <dialog id="archive-dialog" class="modal"><div class="modal-head"><p class="eyebrow">ARCHIVED RECORDS</p><button id="close-archive" class="close-button" aria-label="닫기">×</button></div><h2>보관한 기록</h2><p id="archive-scope" class="small-note"></p><div id="archive-list"></div></dialog>
+  <script src="/editor.js" defer></script>
+  <link rel="stylesheet" href="/drawing.css">
+  <script src="/drawing.js" defer></script>
+  <script src="/image-layout.js" defer></script>
+  <script src="/contents.js" defer></script>
+  <script src="/shelf.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
