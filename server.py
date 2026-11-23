@@ -10,15 +10,18 @@ import re
 import secrets
 import sqlite3
 import sys
+import tempfile
 import threading
 import urllib.parse
 import urllib.request
 import uuid
 import webbrowser
-from contextlib import contextmanager
+import zipfile
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from shutil import copyfileobj
 
 import pandas as pd
 from PIL import Image
@@ -196,6 +199,19 @@ def create_notebook(title: str, source_url: str = "") -> dict:
     return {"id": notebook_id, "title": title, "source_url": source_url[:500], "experiment_count": 0}
 
 
+def rename_notebook(notebook_id: str, title: str) -> dict:
+    title = title.strip()
+    if not title:
+        raise ValueError("책 제목을 입력해 주세요.")
+    if len(title) > 160:
+        raise ValueError("책 제목은 160자까지 입력할 수 있습니다.")
+    with connect() as db:
+        if db.execute("SELECT 1 FROM notebooks WHERE id=?", (notebook_id,)).fetchone() is None:
+            raise ValueError("책을 찾을 수 없습니다.")
+        db.execute("UPDATE notebooks SET title=? WHERE id=?", (title, notebook_id))
+    return {"id": notebook_id, "title": title}
+
+
 def list_notebooks() -> list[dict]:
     with connect() as db:
         rows = db.execute(
@@ -204,6 +220,37 @@ def list_notebooks() -> list[dict]:
             "GROUP BY n.id ORDER BY CASE WHEN n.id='personal' THEN 0 ELSE 1 END,n.created_at DESC"
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def create_backup() -> Path:
+    """Create a consistent database snapshot with every referenced attachment."""
+    backup_fd, backup_name = tempfile.mkstemp(prefix="labnote-backup-", suffix=".zip")
+    snapshot_fd, snapshot_name = tempfile.mkstemp(prefix="labnote-snapshot-", suffix=".sqlite3")
+    os.close(backup_fd)
+    os.close(snapshot_fd)
+    backup = Path(backup_name)
+    snapshot = Path(snapshot_name)
+    try:
+        with connect() as source, closing(sqlite3.connect(snapshot)) as target:
+            source.backup(target)
+        with closing(sqlite3.connect(snapshot)) as db:
+            names = [row[0] for row in db.execute("SELECT DISTINCT stored_name FROM attachments")]
+        with zipfile.ZipFile(backup, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.write(snapshot, "data/labnote.sqlite3")
+            for name in names:
+                if Path(name).name != name:
+                    raise ValueError("첨부파일 경로가 올바르지 않습니다.")
+                path = FILES / name
+                if not path.is_file():
+                    raise ValueError(f"첨부파일이 없어 백업을 만들 수 없습니다: {name}")
+                archive.write(path, f"data/files/{name}")
+            archive.writestr("backup-info.json", json.dumps({"created_at": now(), "attachment_count": len(names)}, ensure_ascii=False))
+        return backup
+    except Exception:
+        backup.unlink(missing_ok=True)
+        raise
+    finally:
+        snapshot.unlink(missing_ok=True)
 
 
 def record_revision(db: sqlite3.Connection, experiment_id: str, target: str,
@@ -729,6 +776,21 @@ class Handler(BaseHTTPRequestHandler):
             parts = path.strip("/").split("/")
             if path == "/api/notebooks":
                 return self.send_json(list_notebooks())
+            if path == "/api/backup":
+                backup = create_backup()
+                try:
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/zip")
+                    self.send_header("Content-Disposition", f'attachment; filename="labnote-backup-{datetime.now().date().isoformat()}.zip"')
+                    self.send_header("Content-Length", str(backup.stat().st_size))
+                    self.send_header("Cache-Control", "no-store")
+                    self.send_header("X-Content-Type-Options", "nosniff")
+                    self.end_headers()
+                    with backup.open("rb") as source:
+                        copyfileobj(source, self.wfile)
+                finally:
+                    backup.unlink(missing_ok=True)
+                return
             if path == "/api/experiments":
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 return self.send_json(list_experiments(notebook_id=query.get('notebook_id',[None])[0], query=query.get('q',[''])[0]))
@@ -768,6 +830,8 @@ class Handler(BaseHTTPRequestHandler):
             data = self.body()
             if parts == ["api", "notebooks"]:
                 return self.send_json(create_notebook(str(data.get("title", "")), str(data.get("source_url", ""))))
+            if len(parts) == 4 and parts[:2] == ["api", "notebooks"] and parts[3] == "title":
+                return self.send_json(rename_notebook(parts[2], str(data.get("title", ""))))
             if parts == ["api", "experiments"]:
                 return self.send_json(create_experiment(str(data.get("title", "")), str(data.get("experiment_date", "")), str(data.get("notebook_id", "personal"))))
             if len(parts) == 3 and parts[:2] == ["api", "experiments"]:

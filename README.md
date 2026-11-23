@@ -1,10 +1,12 @@
-# 로컬 AI 연구노트 · 첫 작동 버전
+# 연구노트 · Windows 전자랩노트
 
-실험을 기록하고 사진·결과 파일을 붙이며, 그래프를 확인하는 로컬 앱입니다. **실험 항목과 첨부파일은 기본적으로 AI 사용 금지**이며, 사용자가 허용한 것만 컴퓨터에서 실행 중인 AI로 전달합니다.
+기존 책장 디자인을 Windows 데스크톱 창에 담은 전자랩노트입니다. `Labnote.exe`를 실행하면 브라우저 주소창 없이 앱 창이 열립니다. 내부 기능은 컴퓨터 안의 임시 `127.0.0.1` 포트에서만 동작하며, 창을 닫으면 함께 종료됩니다. 기록과 첨부파일은 EXE 옆 `data/`에 저장합니다. **실험 항목과 첨부파일은 기본적으로 AI 사용 금지**입니다.
 
 ## 실행
 
-Windows에서 `start.bat`를 실행하세요. Python이 필요합니다. 라이브러리가 없다면 이 폴더에서 `python -m pip install -r requirements.txt`를 한 번 실행합니다. 앱은 `http://127.0.0.1:8765`에서 열리고, 실험 데이터는 이 폴더의 `data/`에 저장됩니다. 다른 컴퓨터에서 접속할 수 없도록 로컬 주소에만 연결합니다.
+Windows에서 `Labnote.exe` 또는 `start.bat`를 더블클릭하세요. 시작 메뉴에 등록하려면 이 폴더에서 PowerShell로 `powershell -ExecutionPolicy Bypass -File .\install-shortcut.ps1`을 한 번 실행합니다. 그러면 Windows 검색에서 **전자랩노트**로 찾을 수 있습니다. EXE를 다시 만들려면 `python -m pip install -r requirements.txt pyinstaller` 후 `powershell -ExecutionPolicy Bypass -File .\build-exe.ps1`을 실행합니다. 개발 중에는 `python app.py`로도 실행할 수 있습니다.
+
+기존 웹 화면의 책장, 실험 기록, 그림 편집, 사진 주석, 첨부파일, 그래프, AI 분석, 논문 검색 기능을 그대로 사용합니다. 원본 데이터는 `data/`에 남아 있습니다.
 
 ## 사용 순서
 

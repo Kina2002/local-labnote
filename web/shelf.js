@@ -61,6 +61,7 @@ function renderBookHome() {
   const book = currentBook();
   if (!book) return showShelf();
   $('book-title').textContent = book.title;
+  $('top-status').textContent = book.title;
   $('book-overview').textContent = book.overview || '';
   $('book-overview').classList.toggle('hidden', !book.overview);
   $('book-count').textContent = `기록 ${book.experiment_count}개`;
@@ -172,6 +173,44 @@ document.addEventListener('DOMContentLoaded', () => {
     $('new-book-title').value = '';
     $('new-book-source').value = '';
     $('book-dialog').showModal();
+  };
+  let renamingBookId = null, renamingBookBusy = false;
+  $('rename-book').onclick = () => {
+    const book = currentBook();
+    if (!book) return;
+    renamingBookId = book.id;
+    $('rename-book-title').value = book.title;
+    $('rename-book-error').textContent = '';
+    $('rename-book-dialog').showModal();
+    $('rename-book-title').focus();
+    $('rename-book-title').select();
+  };
+  const closeRenameBook = () => { if (!renamingBookBusy) $('rename-book-dialog').close(); };
+  $('rename-book-close').onclick = closeRenameBook;
+  $('rename-book-cancel').onclick = closeRenameBook;
+  $('rename-book-dialog').addEventListener('cancel', event => { if (renamingBookBusy) event.preventDefault(); });
+  $('rename-book-form').onsubmit = async event => {
+    event.preventDefault();
+    if (renamingBookBusy) return;
+    const title = $('rename-book-title').value.trim();
+    if (!title) { $('rename-book-error').textContent = '책 제목을 입력해 주세요.'; return; }
+    renamingBookBusy = true;
+    for (const control of $('rename-book-form').elements) control.disabled = true;
+    try {
+      const result = await api(`/api/notebooks/${renamingBookId}/title`, 'POST', {title});
+      const book = books.find(item => item.id === result.id);
+      if (book) book.title = result.title;
+      renderBookNav();
+      renderShelf();
+      if (selectedBookId && !current) renderBookHome();
+      if (current) $('crumb-book').textContent = currentBook()?.title || '책';
+      $('rename-book-dialog').close();
+      toast('책 제목을 변경했습니다.');
+    } catch (error) { $('rename-book-error').textContent = error.message; }
+    finally {
+      renamingBookBusy = false;
+      for (const control of $('rename-book-form').elements) control.disabled = false;
+    }
   };
   $('book-new-experiment').onclick = () => openCreate();
   $('book-dialog').addEventListener('close', async () => {

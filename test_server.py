@@ -2,8 +2,11 @@
 
 import base64
 import io
+import sqlite3
 import tempfile
 import unittest
+import zipfile
+from contextlib import closing
 from pathlib import Path
 
 import pymupdf
@@ -25,6 +28,27 @@ class NotebookTests(unittest.TestCase):
     def tearDown(self):
         server.DB, server.FILES = self.old
         self.temp.cleanup()
+
+    def test_backup_contains_saved_record_and_attachment(self):
+        server.update_section(self.id, "purpose", {"content": "BACKUP_MARKER", "ai_allowed": False})
+        payload = self.drawing_payload()
+        saved = server.save_drawing(self.id, payload)
+        attachment = saved["attachments"][0]
+        archive_path = server.create_backup()
+        try:
+            with zipfile.ZipFile(archive_path) as archive:
+                self.assertIsNone(archive.testzip())
+                self.assertIn("data/labnote.sqlite3", archive.namelist())
+                self.assertIn("backup-info.json", archive.namelist())
+                with tempfile.TemporaryDirectory() as restore_dir:
+                    archive.extractall(restore_dir)
+                    with closing(sqlite3.connect(Path(restore_dir) / "data" / "labnote.sqlite3")) as db:
+                        content = db.execute("SELECT content FROM sections WHERE experiment_id=? AND key='purpose'", (self.id,)).fetchone()[0]
+                        stored_name = db.execute("SELECT stored_name FROM attachments WHERE id=?", (attachment["id"],)).fetchone()[0]
+                    self.assertEqual(content, "BACKUP_MARKER")
+                    self.assertTrue((Path(restore_dir) / "data" / "files" / stored_name).is_file())
+        finally:
+            archive_path.unlink(missing_ok=True)
 
     def test_only_explicitly_allowed_section_reaches_ai(self):
         server.update_section(self.id, "purpose", {"content": "VISIBLE_MARKER", "ai_allowed": True})
