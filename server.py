@@ -108,6 +108,10 @@ def init_db() -> None:
               created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
               notebook_id TEXT REFERENCES notebooks(id)
             );
+            CREATE TABLE IF NOT EXISTS topics (
+              id TEXT PRIMARY KEY, notebook_id TEXT NOT NULL REFERENCES notebooks(id),
+              title TEXT NOT NULL, created_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS sections (
               experiment_id TEXT NOT NULL REFERENCES experiments(id),
               key TEXT NOT NULL, content TEXT NOT NULL DEFAULT '',
@@ -151,9 +155,10 @@ def init_db() -> None:
         columns = {row["name"] for row in db.execute("PRAGMA table_info(experiments)")}
         if "notebook_id" not in columns:
             db.execute("ALTER TABLE experiments ADD COLUMN notebook_id TEXT REFERENCES notebooks(id)")
-        for name, definition in {"archived": "INTEGER NOT NULL DEFAULT 0", "record_type": "TEXT NOT NULL DEFAULT 'experiment'", "series_id": "TEXT", "run_number": "INTEGER DEFAULT 1"}.items():
+        for name, definition in {"archived": "INTEGER NOT NULL DEFAULT 0", "record_type": "TEXT NOT NULL DEFAULT 'experiment'", "series_id": "TEXT", "run_number": "INTEGER DEFAULT 1", "topic_id": "TEXT REFERENCES topics(id)", "record_code": "TEXT NOT NULL DEFAULT ''"}.items():
             if name not in columns:
                 db.execute(f"ALTER TABLE experiments ADD COLUMN {name} {definition}")
+        db.execute("DROP INDEX IF EXISTS unique_record_code_in_book")
         db.execute("UPDATE experiments SET series_id=id WHERE series_id IS NULL")
         book_columns = {row["name"] for row in db.execute("PRAGMA table_info(notebooks)")}
         if "overview" not in book_columns:
@@ -222,6 +227,54 @@ def list_notebooks() -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def list_topics(notebook_id: str | None = None) -> list[dict]:
+    with connect() as db:
+        rows = db.execute(
+            "SELECT t.id,t.notebook_id,t.title,t.created_at,COUNT(e.id) AS experiment_count "
+            "FROM topics t LEFT JOIN experiments e ON e.topic_id=t.id AND e.archived=0 "
+            + ("WHERE t.notebook_id=? " if notebook_id else "")
+            + "GROUP BY t.id ORDER BY t.created_at,t.rowid",
+            (notebook_id,) if notebook_id else (),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def create_topic(notebook_id: str, title: str) -> dict:
+    title = title.strip()
+    if not title or len(title) > 160:
+        raise ValueError("주제 이름은 1~160자로 입력해 주세요.")
+    topic_id = uuid.uuid4().hex
+    with connect() as db:
+        if db.execute("SELECT 1 FROM notebooks WHERE id=?", (notebook_id,)).fetchone() is None:
+            raise ValueError("책을 찾을 수 없습니다.")
+        db.execute("INSERT INTO topics(id,notebook_id,title,created_at) VALUES(?,?,?,?)", (topic_id, notebook_id, title, now()))
+    return {"id": topic_id, "notebook_id": notebook_id, "title": title, "experiment_count": 0}
+
+
+def rename_topic(topic_id: str, title: str) -> dict:
+    title = title.strip()
+    if not title or len(title) > 160:
+        raise ValueError("주제 이름은 1~160자로 입력해 주세요.")
+    with connect() as db:
+        row = db.execute("SELECT notebook_id FROM topics WHERE id=?", (topic_id,)).fetchone()
+        if row is None:
+            raise ValueError("주제를 찾을 수 없습니다.")
+        db.execute("UPDATE topics SET title=? WHERE id=?", (title, topic_id))
+    return {"id": topic_id, "notebook_id": row["notebook_id"], "title": title}
+
+
+def clean_record_code(value: str) -> str:
+    code = value.strip()
+    if len(code) > 80 or any(character in code for character in "\r\n\t"):
+        raise ValueError("실험 번호는 한 줄로 80자까지 입력할 수 있습니다.")
+    return code
+
+
+def validate_topic(db: sqlite3.Connection, notebook_id: str, topic_id: str | None) -> None:
+    if topic_id and db.execute("SELECT 1 FROM topics WHERE id=? AND notebook_id=?", (topic_id, notebook_id)).fetchone() is None:
+        raise ValueError("이 책에 속한 주제를 선택해 주세요.")
+
+
 def create_backup() -> Path:
     """Create a consistent database snapshot with every referenced attachment."""
     backup_fd, backup_name = tempfile.mkstemp(prefix="labnote-backup-", suffix=".zip")
@@ -261,19 +314,22 @@ def record_revision(db: sqlite3.Connection, experiment_id: str, target: str,
     )
 
 
-def create_experiment(title: str, experiment_date: str, notebook_id: str = "personal") -> dict:
+def create_experiment(title: str, experiment_date: str, notebook_id: str = "personal", topic_id: str | None = None, record_code: str = "") -> dict:
     title = title.strip()[:160] or "새 실험"
     if not experiment_date or len(experiment_date) != 10:
         experiment_date = datetime.now().date().isoformat()
     experiment_id = uuid.uuid4().hex
+    topic_id = topic_id or None
+    record_code = clean_record_code(record_code)
     timestamp = now()
     with connect() as db:
         if db.execute("SELECT 1 FROM notebooks WHERE id=?", (notebook_id,)).fetchone() is None:
             raise ValueError("책을 찾을 수 없습니다.")
+        validate_topic(db, notebook_id, topic_id)
         number = db.execute("SELECT COALESCE(MAX(number), 0) + 1 FROM experiments").fetchone()[0]
         db.execute(
-            "INSERT INTO experiments(id,number,title,experiment_date,created_at,updated_at,notebook_id) VALUES(?,?,?,?,?,?,?)",
-            (experiment_id, number, title, experiment_date, timestamp, timestamp, notebook_id),
+            "INSERT INTO experiments(id,number,title,experiment_date,created_at,updated_at,notebook_id,topic_id,record_code) VALUES(?,?,?,?,?,?,?,?,?)",
+            (experiment_id, number, title, experiment_date, timestamp, timestamp, notebook_id, topic_id, record_code),
         )
         db.executemany(
             "INSERT INTO sections(experiment_id,key,content,ai_allowed,updated_at) VALUES(?,?,?,0,?)",
@@ -295,14 +351,14 @@ def list_experiments(archived: bool = False, notebook_id: str | None = None, que
     query = re.sub(r"(\d{4})[./년-]\s*(\d{1,2})(?:[./월-]\s*(\d{1,2})일?)?", lambda m: f"{m[1]}-{int(m[2]):02d}" + (f"-{int(m[3]):02d}" if m[3] else ""), query)
     for term in query.split():
         pattern = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-        clauses.append("(e.title LIKE ? ESCAPE '\\' OR e.experiment_date LIKE ? ESCAPE '\\' "
+        clauses.append("(e.title LIKE ? ESCAPE '\\' OR e.experiment_date LIKE ? ESCAPE '\\' OR e.record_code LIKE ? ESCAPE '\\' OR t.title LIKE ? ESCAPE '\\' "
                        "OR (CASE WHEN e.record_type='literature' THEN 'LIT-' ELSE 'EXP-' END || printf('%03d',e.number)) LIKE ? ESCAPE '\\' "
                        "OR EXISTS(SELECT 1 FROM sections s WHERE s.experiment_id=e.id AND s.content LIKE ? ESCAPE '\\'))")
-        values.extend([pattern] * 4)
+        values.extend([pattern] * 6)
     with connect() as db:
         rows = db.execute(
-            "SELECT e.id,e.number,e.title,e.experiment_date,e.created_at,e.updated_at,e.notebook_id,e.record_type,e.series_id,e.run_number,e.archived "
-            "FROM experiments e WHERE " + " AND ".join(clauses) + " ORDER BY " + ("e.number ASC" if archived else "e.experiment_date DESC,e.number DESC"),
+            "SELECT e.id,e.number,e.title,e.experiment_date,e.created_at,e.updated_at,e.notebook_id,e.record_type,e.series_id,e.run_number,e.archived,e.topic_id,e.record_code,t.title AS topic_title "
+            "FROM experiments e LEFT JOIN topics t ON t.id=e.topic_id WHERE " + " AND ".join(clauses) + " ORDER BY " + ("e.number ASC" if archived else "e.experiment_date DESC,e.number DESC"),
             values,
         ).fetchall()
     return [dict(row) for row in rows]
@@ -332,7 +388,7 @@ def archive_experiment(experiment_id: str) -> dict:
 
 def repeat_experiment(experiment_id: str) -> dict:
     source = get_experiment(experiment_id)
-    entry = create_experiment(source["title"], "", source["notebook_id"])
+    entry = create_experiment(source["title"], "", source["notebook_id"], source["topic_id"])
     with connect() as db:
         series = source["series_id"] or source["id"]
         run = db.execute("SELECT COALESCE(MAX(run_number),0)+1 FROM experiments WHERE series_id=? AND record_type!='literature'", (series,)).fetchone()[0]
@@ -345,7 +401,7 @@ def repeat_experiment(experiment_id: str) -> dict:
 
 def get_experiment(experiment_id: str) -> dict:
     with connect() as db:
-        row = db.execute("SELECT * FROM experiments WHERE id=?", (experiment_id,)).fetchone()
+        row = db.execute("SELECT e.*,t.title AS topic_title FROM experiments e LEFT JOIN topics t ON t.id=e.topic_id WHERE e.id=?", (experiment_id,)).fetchone()
         if row is None:
             raise ValueError("실험을 찾을 수 없습니다.")
         sections = db.execute(
@@ -379,16 +435,19 @@ def get_experiment(experiment_id: str) -> dict:
 
 def update_experiment(experiment_id: str, data: dict) -> dict:
     with connect() as db:
-        current = db.execute("SELECT title,experiment_date,record_type FROM experiments WHERE id=?", (experiment_id,)).fetchone()
+        current = db.execute("SELECT title,experiment_date,record_type,notebook_id,topic_id,record_code FROM experiments WHERE id=?", (experiment_id,)).fetchone()
         if not current:
             raise ValueError("실험을 찾을 수 없습니다.")
         title = str(data.get("title", current["title"])).strip()[:160] or current["title"]
         date = str(data.get("experiment_date", current["experiment_date"]))
         if len(date) != 10 and not (date == '' and current['record_type'] == 'literature'):
             raise ValueError("실험 날짜를 확인해 주세요.")
+        topic_id = data.get("topic_id", current["topic_id"]) or None
+        code = clean_record_code(str(data.get("record_code", current["record_code"])))
+        validate_topic(db, current["notebook_id"], topic_id)
         db.execute(
-            "UPDATE experiments SET title=?,experiment_date=?,updated_at=? WHERE id=?",
-            (title, date, now(), experiment_id),
+            "UPDATE experiments SET title=?,experiment_date=?,topic_id=?,record_code=?,updated_at=? WHERE id=?",
+            (title, date, topic_id, code, now(), experiment_id),
         )
         record_revision(db, experiment_id, "experiment", "edited",
                         json.dumps(dict(current), ensure_ascii=False))
@@ -763,7 +822,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(raw)
                 return
-            if path in {"/style.css", "/book.css", "/drawing.css", "/drawing.js", "/image-layout.js", "/editor.js", "/contents.js", "/app.js", "/shelf.js"}:
+            if path in {"/style.css", "/book.css", "/topics.css", "/drawing.css", "/drawing.js", "/image-layout.js", "/editor.js", "/contents.js", "/app.js", "/shelf.js"}:
                 raw = (WEB / path[1:]).read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/css" if path.endswith("css") else "text/javascript")
@@ -776,6 +835,9 @@ class Handler(BaseHTTPRequestHandler):
             parts = path.strip("/").split("/")
             if path == "/api/notebooks":
                 return self.send_json(list_notebooks())
+            if path == "/api/topics":
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                return self.send_json(list_topics(query.get("notebook_id", [None])[0]))
             if path == "/api/backup":
                 backup = create_backup()
                 try:
@@ -830,10 +892,14 @@ class Handler(BaseHTTPRequestHandler):
             data = self.body()
             if parts == ["api", "notebooks"]:
                 return self.send_json(create_notebook(str(data.get("title", "")), str(data.get("source_url", ""))))
+            if parts == ["api", "topics"]:
+                return self.send_json(create_topic(str(data.get("notebook_id", "")), str(data.get("title", ""))))
+            if len(parts) == 3 and parts[:2] == ["api", "topics"]:
+                return self.send_json(rename_topic(parts[2], str(data.get("title", ""))))
             if len(parts) == 4 and parts[:2] == ["api", "notebooks"] and parts[3] == "title":
                 return self.send_json(rename_notebook(parts[2], str(data.get("title", ""))))
             if parts == ["api", "experiments"]:
-                return self.send_json(create_experiment(str(data.get("title", "")), str(data.get("experiment_date", "")), str(data.get("notebook_id", "personal"))))
+                return self.send_json(create_experiment(str(data.get("title", "")), str(data.get("experiment_date", "")), str(data.get("notebook_id", "personal")), data.get("topic_id"), str(data.get("record_code", ""))))
             if len(parts) == 3 and parts[:2] == ["api", "experiments"]:
                 return self.send_json(update_experiment(parts[2], data))
             if len(parts) == 4 and parts[:2] == ["api", "experiments"] and parts[3] == "repeat":

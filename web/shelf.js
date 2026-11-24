@@ -1,4 +1,5 @@
 let books = [];
+let topics = [];
 let selectedBookId = null;
 let archiveReturnBookId = null;
 
@@ -12,6 +13,7 @@ function visibleExperiments() {
 
 async function refreshShelf() {
   books = await api('/api/notebooks');
+  topics = await api('/api/topics');
   if (selectedBookId && !currentBook()) selectedBookId = null;
   renderBookNav();
   renderShelf();
@@ -70,14 +72,33 @@ function renderBookHome() {
   if (book.source_url) source.href = book.source_url;
   const list = $('book-experiments');
   list.innerHTML = '';
-  const shown = visibleExperiments();
+  const bookTopics = topics.filter(topic => topic.notebook_id === selectedBookId);
+  const visible = visibleExperiments();
+  const shown = [...bookTopics.map(topic => visible.filter(exp => exp.topic_id === topic.id)).flat(), ...visible.filter(exp => !exp.topic_id)];
   const pagination=paginateContents(shown,bookContentsPage);
   bookContentsPage=pagination.page;
-  if (!shown.length) {
+  if (!shown.length && !bookTopics.length) {
     const empty=document.createElement('p');empty.className='book-empty';empty.textContent=contentsEmptyMessage();list.append(empty);
   } else {
-    for (const exp of pagination.records) {
-      const row=makeExperimentLink(exp);row.title=`${recordNumber(exp)} · ${exp.title}`;list.append(row);
+    for (const topic of [...bookTopics, {id: '', title: '주제 없음'}]) {
+      const records = pagination.records.filter(exp => (exp.topic_id || '') === topic.id);
+      if (!records.length && (topic.id === '' || contentsQuery || bookContentsPage !== 1)) continue;
+      const group = document.createElement('section'); group.className = 'topic-group';
+      const head = document.createElement('div'); head.className = 'topic-group-head';
+      const title = document.createElement('h3'); title.textContent = topic.title;
+      const actions = document.createElement('div'); actions.className = 'topic-group-actions';
+      if (topic.id) {
+        const rename = document.createElement('button'); rename.type = 'button'; rename.className = 'text-button'; rename.textContent = '이름 변경'; rename.onclick = () => openTopicDialog(topic); actions.append(rename);
+      }
+      const add = document.createElement('button'); add.type = 'button'; add.className = 'text-button'; add.textContent = '＋ 실험'; add.onclick = () => openCreate(topic.id); actions.append(add);
+      head.append(title, actions); group.append(head);
+      for (const exp of records) {
+        const row=makeExperimentLink(exp); row.title=`${recordNumber(exp)} · ${exp.title}`; group.append(row);
+      }
+      list.append(group);
+    }
+    if (!shown.length) {
+      const empty = document.createElement('p'); empty.className = 'book-empty'; empty.textContent = contentsEmptyMessage(); list.append(empty);
     }
   }
   $('book-list-summary').textContent=contentsSearching?'검색 중…':contentsSearchError?'검색 오류':shown.length?`${contentsQuery?'검색 결과':'전체'} ${shown.length}개 · ${pagination.start+1}–${pagination.start+pagination.records.length}번째 표시`:'표시할 실험이 없습니다.';
@@ -213,6 +234,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
   $('book-new-experiment').onclick = () => openCreate();
+  $('new-topic').onclick = () => openTopicDialog();
+  $('new-topic-from-create').onclick = () => openTopicDialog();
+  $('topic-dialog').addEventListener('close', async () => {
+    if ($('topic-dialog').returnValue !== 'save') return;
+    const title = $('topic-title').value.trim();
+    if (!title) return;
+    try {
+      const topic = editingTopicId
+        ? await api(`/api/topics/${editingTopicId}`, 'POST', {title})
+        : await api('/api/topics', 'POST', {notebook_id: selectedBookId, title});
+      await refreshShelf();
+      fillTopicSelect($('new-topic'), topic.id);
+      if (current && current.notebook_id === selectedBookId) fillTopicSelect($('record-topic'), current.topic_id || '');
+      toast(editingTopicId ? '주제 이름을 변경했습니다.' : '새 주제를 만들었습니다.');
+    } catch (error) { toast(error.message); }
+  });
   $('book-dialog').addEventListener('close', async () => {
     if ($('book-dialog').returnValue !== 'create') return;
     try {
@@ -234,6 +271,8 @@ function updateRecordHeader() {
   const archived = Boolean(current.archived);
   $('experiment-date').disabled = literature || archived;
   $('experiment-title').readOnly = archived;
+  $('record-code').readOnly = archived;
+  $('record-topic').disabled = archived;
   $('open-tools').disabled = archived;
   $('open-tools').classList.toggle('hidden', archived);
   $('restore-record').classList.toggle('hidden', !archived);
@@ -288,6 +327,8 @@ async function persistRecordEdits() {
   const id = current.id;
   const title = $('experiment-title').value.trim() || current.title;
   const date = $('experiment-date').value;
+  const recordCode = $('record-code').value.trim();
+  const topicId = $('record-topic').value || null;
   const contents = [...document.querySelectorAll('#sections textarea')].map(el=>el.value);
   await saveQueue;
   if (current?.id !== id) throw new Error('열린 기록이 바뀌었습니다. 다시 시도해 주세요.');
@@ -296,7 +337,23 @@ async function persistRecordEdits() {
       current = await api(`/api/experiments/${id}/sections/${key}`, 'POST', {content:contents[index]});
     }
   }
-  if(title !== current.title || date !== current.experiment_date) {
-    current = await api(`/api/experiments/${id}`, 'POST', {title, experiment_date:date});
+  if(title !== current.title || date !== current.experiment_date || recordCode !== (current.record_code || '') || topicId !== (current.topic_id || null)) {
+    current = await api(`/api/experiments/${id}`, 'POST', {title, experiment_date:date, record_code:recordCode, topic_id:topicId});
   }
+}
+
+let editingTopicId = null;
+function fillTopicSelect(select, selected = '') {
+  select.replaceChildren();
+  const blank = new Option('주제 없음', ''); select.add(blank);
+  for (const topic of topics.filter(item => item.notebook_id === selectedBookId)) select.add(new Option(topic.title, topic.id));
+  select.value = selected || '';
+}
+function openTopicDialog(topic = null) {
+  if (!selectedBookId) return;
+  editingTopicId = topic?.id || null;
+  $('topic-dialog-title').textContent = topic ? '주제 이름 변경' : '새 주제';
+  $('topic-title').value = topic?.title || '';
+  $('topic-dialog').showModal();
+  $('topic-title').focus();
 }

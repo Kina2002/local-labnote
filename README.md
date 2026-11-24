@@ -4,7 +4,7 @@
 
 ## 실행
 
-Windows에서 `Labnote.exe` 또는 `start.bat`를 더블클릭하세요. 시작 메뉴에 등록하려면 이 폴더에서 PowerShell로 `powershell -ExecutionPolicy Bypass -File .\install-shortcut.ps1`을 한 번 실행합니다. 그러면 Windows 검색에서 **전자랩노트**로 찾을 수 있습니다. EXE를 다시 만들려면 `python -m pip install -r requirements.txt pyinstaller` 후 `powershell -ExecutionPolicy Bypass -File .\build-exe.ps1`을 실행합니다. 개발 중에는 `python app.py`로도 실행할 수 있습니다.
+Windows에서 최신 `Labnote*.exe` 또는 `start.bat`를 더블클릭하세요. 시작 메뉴에 등록하려면 이 폴더에서 PowerShell로 `powershell -ExecutionPolicy Bypass -File .\install-shortcut.ps1`을 한 번 실행합니다. 그러면 Windows 검색에서 **전자랩노트**로 찾을 수 있습니다. EXE를 다시 만들려면 `python -m pip install -r requirements.txt pyinstaller` 후 `powershell -ExecutionPolicy Bypass -File .\build-exe.ps1`을 실행합니다. 개발 중에는 `python app.py`로도 실행할 수 있습니다.
 
 기존 웹 화면의 책장, 실험 기록, 그림 편집, 사진 주석, 첨부파일, 그래프, AI 분석, 논문 검색 기능을 그대로 사용합니다. 원본 데이터는 `data/`에 남아 있습니다.
 
@@ -14,7 +14,7 @@ Windows에서 `Labnote.exe` 또는 `start.bat`를 더블클릭하세요. 시작 
 
 기록 오른쪽 위 **보관하기**를 누르면 편집 내용을 저장한 뒤 일반 목록에서 보관 목록으로 옮깁니다. **닫기 ×**는 일반 기록에서 책 목차로, 보관 기록에서는 보관 목록으로 돌아갑니다.
 
-1. **내 책장**에서 연구 주제나 논문별로 책을 만듭니다. 책 한 권에 여러 실험 페이지를 넣을 수 있습니다. 책을 고른 뒤 **새 실험**을 누르면 번호가 붙고, 그 책의 타임라인·달력에서 다시 찾을 수 있습니다.
+1. **내 책장**에서 연구 주제나 논문별로 책을 만듭니다. 책 안의 **새 주제**로 실험을 나눌 수 있습니다. 주제 이름과 실험 번호는 자유롭게 입력하며, `KP-01-01` 같은 번호도 그대로 저장하고 검색할 수 있습니다. 번호를 비우면 기존 자동 번호가 표시됩니다. 번호의 구성 요소를 AI가 알아보는 기능은 아직 추가되지 않았습니다.
 2. 목적·방법·관찰·결과·내 생각을 쓰고, 마지막 **참고 자료** 칸에 자료명·출처 링크 또는 DOI·참고한 내용을 적습니다. 사진·CSV·XLSX·PDF도 항목별로 첨부할 수 있습니다. 휴대폰 사진은 USB 또는 Android Quick Share로 컴퓨터에 옮긴 후 첨부합니다.
 3. CSV/XLSX 파일 이름을 누르면 표의 숫자 열로 간단한 그래프를 볼 수 있습니다.
 4. AI가 읽어도 되는 항목과 파일만 `🏠 로컬 AI 허용`으로 바꿉니다. `AI 도움`에서 실제 전달 대상을 확인합니다.

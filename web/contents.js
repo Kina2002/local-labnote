@@ -24,7 +24,10 @@ function sortContentsRecords(records,sort=contentsSort){
       if(!a.experiment_date!==!b.experiment_date)return a.experiment_date?-1:1;
       result=(a.experiment_date||'').localeCompare(b.experiment_date||'');
     }else if(field==='title')result=a.title.localeCompare(b.title,'ko',{numeric:true,sensitivity:'base'});
-    else result=a.number-b.number;
+    else {
+      const code = exp => exp.record_code || (exp.record_type === 'literature' ? `LIT-${String(exp.number).padStart(3,'0')}` : `EXP-${String(exp.number).padStart(3,'0')}`);
+      result=code(a).localeCompare(code(b),'ko',{numeric:true,sensitivity:'base'});
+    }
     return result*sign||a.number-b.number;
   });
 }

@@ -15,7 +15,7 @@ node_modules/
 *.key
 .DS_Store
 Thumbs.db
-Labnote.exe
+Labnote*.exe
 build/
 
 # Local browser sessions and one-off data migration/demo scripts.

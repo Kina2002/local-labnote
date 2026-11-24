@@ -178,6 +178,28 @@ class NotebookTests(unittest.TestCase):
         self.assertEqual(server.get_experiment(self.id)["notebook_id"], "personal")
         self.assertEqual(server.get_experiment(second["id"])["notebook_id"], book["id"])
 
+    def test_topics_and_free_form_numbers_survive_search_repeat_and_migration(self):
+        book = server.create_notebook("코팅 연구")
+        topic = server.create_topic(book["id"], "KP의 첫 주제")
+        first = server.create_experiment("접착력", "2026-11-20", book["id"], topic["id"], "KP-01-01")
+        second = server.create_experiment("내열성", "2026-11-21", book["id"], topic["id"], "KP-01-01")
+        self.assertEqual(first["record_code"], "KP-01-01")
+        self.assertEqual(first["topic_title"], "KP의 첫 주제")
+        self.assertEqual([row["id"] for row in server.list_experiments(notebook_id=book["id"], query="KP-01-01")], [second["id"], first["id"]])
+        self.assertEqual([row["id"] for row in server.list_experiments(notebook_id=book["id"], query="첫 주제")], [second["id"], first["id"]])
+        renamed = server.rename_topic(topic["id"], "자유 형식 주제")
+        self.assertEqual(renamed["title"], server.get_experiment(first["id"])["topic_title"])
+        changed = server.update_experiment(first["id"], {"record_code": "실험 A / 2026", "topic_id": None})
+        self.assertEqual((changed["record_code"], changed["topic_id"]), ("실험 A / 2026", None))
+        repeated = server.repeat_experiment(second["id"])
+        self.assertEqual(repeated["topic_id"], topic["id"])
+        self.assertEqual(repeated["record_code"], "")
+        with self.assertRaises(ValueError):
+            server.update_experiment(second["id"], {"topic_id": "missing"})
+        server.init_db()
+        self.assertEqual(server.get_experiment(second["id"])["record_code"], "KP-01-01")
+        self.assertEqual(server.get_experiment(self.id)["record_code"], "")
+
     def test_existing_record_gets_locked_reference_field(self):
         server.update_section(self.id, "purpose", {"content": "기존 내용"})
         with server.connect() as db:

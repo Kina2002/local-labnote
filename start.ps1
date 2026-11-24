@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
-$labnoteExe = Join-Path $PSScriptRoot 'Labnote.exe'
-if (Test-Path -LiteralPath $labnoteExe) {
-    Start-Process -FilePath $labnoteExe -WorkingDirectory $PSScriptRoot
+$labnoteExe = Get-ChildItem -LiteralPath $PSScriptRoot -Filter 'Labnote*.exe' -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($labnoteExe) {
+    Start-Process -FilePath $labnoteExe.FullName -WorkingDirectory $PSScriptRoot
     return
 }
 $labnotePython = (Get-Command python -ErrorAction Stop).Source

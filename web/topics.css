@@ -1,0 +1,15 @@
+.book-contents-actions,.topic-group-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.topic-group{margin:18px 0 24px;padding:0 0 10px;border-bottom:1px solid #e3dfd2}
+.topic-group-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:9px;padding:5px 2px 9px;border-bottom:1px solid #d9d7ca}
+.topic-group-head h3{margin:0;font-family:'Noto Serif KR','Batang',serif;font-size:16px;color:#355241;overflow-wrap:anywhere}
+.topic-group-actions button{font-size:11px;padding:5px 7px;white-space:nowrap}
+.topic-group .experiment-link{width:100%}
+#book-experiments .topic-group .experiment-link{grid-template-columns:minmax(90px,160px) minmax(0,1fr)}
+#book-experiments .list-number{overflow-wrap:anywhere}
+.record-identifiers{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;margin:0 0 14px}
+.record-identifiers label{display:grid;gap:5px;min-width:0;font-size:10px;color:#6d7a69}
+.record-identifiers input,.record-identifiers select{box-sizing:border-box;width:100%;min-width:0;padding:8px;border:1px solid #d0d7c9;border-radius:4px;background:#fffef9;color:#334839;font:inherit;font-size:12px}
+.record-identifiers input:focus,.record-identifiers select:focus{outline:2px solid #a5bfa5;outline-offset:1px}
+#new-topic-from-create{align-self:flex-start;margin:-6px 0 6px;font-size:11px}
+.modal select{width:100%;padding:11px;border:1px solid #d9e1d7;border-radius:7px;background:#fff;color:var(--ink)}
+@media(max-width:680px){.record-identifiers{grid-template-columns:1fr}.topic-group-head{align-items:flex-start}.topic-group-actions{justify-content:flex-end}#book-experiments .topic-group .experiment-link{grid-template-columns:minmax(75px,110px) minmax(0,1fr)}}

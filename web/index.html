@@ -7,6 +7,7 @@
   <title>연구노트 · 내 컴퓨터의 실험 기록</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/book.css">
+  <link rel="stylesheet" href="/topics.css">
 </head>
 <body>
   <div id="app" data-token="__SESSION_TOKEN__">
@@ -36,7 +37,7 @@
         <div class="book-cover paper"><p class="eyebrow">RESEARCH NOTEBOOK</p><h1 id="book-title"></h1><button id="rename-book" class="subtle-button" type="button">✎ 제목 변경</button><p id="book-count"></p><a id="book-source" class="book-source hidden" target="_blank" rel="noopener noreferrer">출처 열기 ↗</a></div>
         <p id="book-overview" class="book-overview"></p>
         <div class="book-contents">
-          <div class="book-contents-head"><h2>실험 목차</h2><button id="book-new-experiment" class="primary-button">＋ 새 실험</button></div>
+          <div class="book-contents-head"><h2>주제별 실험</h2><div class="book-contents-actions"><button id="new-topic" class="subtle-button" type="button">＋ 새 주제</button><button id="book-new-experiment" class="primary-button">＋ 새 실험</button></div></div>
           <div class="book-contents-controls">
             <div class="contents-search-wrap"><input id="book-contents-search" type="search" maxlength="200" placeholder="날짜·제목·본문 검색" aria-label="이 책 목차 검색"><button id="clear-book-contents-search" type="button" aria-label="목차 검색 지우기" hidden>×</button></div>
             <select id="book-contents-sort" aria-label="이 책 목차 정렬 순서"></select>
@@ -69,6 +70,7 @@
             <div class="page-date-wrap"><label for="experiment-date">실험 날짜</label><input id="experiment-date" type="date"></div>
           </header>
           <textarea id="experiment-title" class="title-input" aria-label="실험 제목" maxlength="160" placeholder="실험 제목" rows="3"></textarea>
+          <div class="record-identifiers"><label for="record-code">표시 번호<input id="record-code" maxlength="80" placeholder="비우면 자동 번호"></label><label for="record-topic">주제<select id="record-topic"></select></label></div>
           <p id="record-context" class="notice"></p><button id="restore-record" class="primary-button hidden">이 기록 복원</button><button id="repeat-experiment" class="subtle-button">다음 회차 기록</button>
           <nav id="page-contents" class="page-contents" aria-label="실험 기록 목차"></nav>
           <p class="page-intro">항목마다 AI 접근을 따로 정할 수 있어요.<br>🔒 AI 사용 금지 &nbsp; 🏠 로컬 AI 허용</p>
@@ -85,9 +87,10 @@
     </main>
   </div>
 
-  <dialog id="create-dialog" class="modal"><form method="dialog"><div class="modal-head"><p class="eyebrow">NEW EXPERIMENT</p><button class="close-button" value="cancel" formnovalidate aria-label="닫기">×</button></div><h2>새 실험 기록</h2><label>실험 제목<input id="new-title" maxlength="160" placeholder="예: 온도별 코팅 강도 비교" required></label><label>실험 날짜<input id="new-date" type="date" required></label><div class="modal-actions"><button value="cancel" formnovalidate class="subtle-button">취소</button><button id="create-save" value="create" class="primary-button">기록 시작</button></div></form></dialog>
+  <dialog id="create-dialog" class="modal"><form method="dialog"><div class="modal-head"><p class="eyebrow">NEW EXPERIMENT</p><button class="close-button" value="cancel" formnovalidate aria-label="닫기">×</button></div><h2>새 실험 기록</h2><label>실험 제목<input id="new-title" maxlength="160" placeholder="예: 온도별 코팅 강도 비교" required></label><label>주제<select id="new-topic"></select></label><button id="new-topic-from-create" class="text-button" type="button">＋ 새 주제 만들기</button><label>실험 번호 (선택)<input id="new-code" maxlength="80" placeholder="예: KP-01-01"></label><p class="small-note">형식은 자유롭게 적으세요. 비워 두면 자동 번호를 씁니다.</p><label>실험 날짜<input id="new-date" type="date" required></label><div class="modal-actions"><button value="cancel" formnovalidate class="subtle-button">취소</button><button id="create-save" value="create" class="primary-button">기록 시작</button></div></form></dialog>
 
   <dialog id="book-dialog" class="modal"><form method="dialog"><div class="modal-head"><p class="eyebrow">NEW BOOK</p><button class="close-button" value="cancel" formnovalidate aria-label="닫기">×</button></div><h2>새 책 만들기</h2><label>책 이름<input id="new-book-title" maxlength="160" placeholder="예: 수계 코팅 연구 / 읽고 있는 논문" required></label><label>논문·자료 주소 (선택)<input id="new-book-source" type="url" placeholder="https://..."></label><div class="modal-actions"><button value="cancel" formnovalidate class="subtle-button">취소</button><button value="create" class="primary-button">책 만들기</button></div></form></dialog>
+  <dialog id="topic-dialog" class="modal"><form method="dialog"><div class="modal-head"><p class="eyebrow">RESEARCH TOPIC</p><button class="close-button" value="cancel" formnovalidate aria-label="닫기">×</button></div><h2 id="topic-dialog-title">새 주제</h2><label>주제 이름<input id="topic-title" maxlength="160" placeholder="예: KP-01 / 코팅 내구성" required></label><p class="small-note">주제 이름과 실험 번호의 형식은 자유롭게 정할 수 있습니다.</p><div class="modal-actions"><button value="cancel" formnovalidate class="subtle-button">취소</button><button value="save" class="primary-button">저장</button></div></form></dialog>
   <dialog id="rename-book-dialog" class="modal" aria-labelledby="rename-book-heading"><form id="rename-book-form"><div class="modal-head"><h2 id="rename-book-heading">책 제목 변경</h2><button id="rename-book-close" type="button" class="close-button" aria-label="닫기">×</button></div><label for="rename-book-title">책 제목</label><input id="rename-book-title" maxlength="160" required><p id="rename-book-error" role="alert"></p><div class="modal-actions"><button id="rename-book-cancel" type="button" class="subtle-button">취소</button><button id="rename-book-save" type="submit" class="primary-button">저장</button></div></form></dialog>
 
   <dialog id="tools-dialog" class="tools-modal"><div class="tools-header"><div><p class="eyebrow">RESEARCH ASSISTANT</p><h2>AI 도움</h2></div><button id="close-tools" class="close-button" aria-label="닫기">×</button></div><div class="tools-tabs"><button id="analysis-tab" class="active">실험 분석</button><button id="papers-tab">논문 찾기</button></div><div id="analysis-panel" class="tools-body"><div class="notice">🏠 허용한 항목만 로컬 AI에 전달합니다. 🔒 항목은 요청에서 제외됩니다.</div><div id="ai-preview" class="preview-box"></div><label for="ai-question">AI에게 묻기</label><textarea id="ai-question" rows="3" placeholder="예: 결과에서 보이는 변화와 추가 확인할 점을 알려줘"></textarea><button id="run-analysis" class="primary-button">허용한 항목으로 분석</button><div id="ai-answer" class="tool-result"></div></div><div id="papers-panel" class="tools-body hidden"><div class="notice">검색어만 Crossref에 전송합니다. 실험 기록과 첨부파일은 보내지 않습니다.</div><label for="paper-query">검색어</label><input id="paper-query" placeholder="예: waterborne polyurethane coating tensile strength"><button id="run-search" class="primary-button">검색어 확인하고 찾기</button><div id="paper-results" class="tool-result"></div></div></dialog>
