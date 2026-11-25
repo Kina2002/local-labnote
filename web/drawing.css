@@ -14,7 +14,8 @@
 .drawing-toolbar button[aria-pressed=true]{background:#214c39;border-color:#214c39;color:#fff}
 .drawing-toolbar button:disabled{opacity:.4;cursor:default}.drawing-separator{width:1px;height:24px;background:#d8ded3;margin:0 5px}
 .drawing-toolbar input[type=color]{width:32px;height:32px;border:0;padding:0;background:transparent;cursor:pointer}
-.drawing-text-row{padding:0 18px 10px}.drawing-text-row input{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #ccd6c7;border-radius:6px;font:inherit}
+.drawing-text-row{padding:0 18px 10px}.drawing-text-row input,.drawing-text-row textarea{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #ccd6c7;border-radius:6px;font:inherit}.drawing-text-row textarea{resize:vertical;min-height:52px}
+.drawing-shape-label{display:flex;align-items:center;gap:5px;font-size:12px;color:#526b59}.drawing-shape-label.active select{background:#214c39;border-color:#214c39;color:#fff}
 .drawing-workspace{background:#e8ece5;padding:16px;height:clamp(160px,45dvh,560px);display:flex;align-items:center;justify-content:center;overscroll-behavior:contain}
 #drawing-canvas{display:block;background:white;box-shadow:0 3px 12px #152f371a;width:auto;height:auto;max-width:100%;max-height:100%;touch-action:none;cursor:crosshair}
 .drawing-foot{padding:12px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}.drawing-foot p{flex:1;min-width:180px;margin:0;font-size:12px;line-height:1.6;color:#67786d}.drawing-foot button{white-space:nowrap}

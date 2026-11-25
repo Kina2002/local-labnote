@@ -17,6 +17,7 @@ node_modules/
 Thumbs.db
 Labnote*.exe
 build/
+.task-browser/
 
 # Local browser sessions and one-off data migration/demo scripts.
 scripts/*

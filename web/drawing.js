@@ -1,6 +1,7 @@
 /* Local, structured drawings. No AI, CDN or external service is involved. */
 let drawingSession=null;
 const drawingClone=value=>JSON.parse(JSON.stringify(value));
+const drawingShapeTools=new Set(['line','dashed','circle','rectangle','triangle','roundedRectangle','roundedTriangle','textbox']);
 function ensureDrawingDialog(){
   if(document.getElementById('drawing-dialog'))return;
   const dialog=document.createElement('dialog');dialog.id='drawing-dialog';dialog.className='drawing-dialog';dialog.setAttribute('aria-labelledby','drawing-title');
@@ -9,18 +10,19 @@ function ensureDrawingDialog(){
     <div class="drawing-editor" id="drawing-editor" hidden>
     <div class="drawing-toolbar" role="toolbar" aria-label="그림 도구">
       <div class="drawing-toolset" id="drawing-chem-tools"><button data-tool="bond" aria-pressed="false">결합</button><select id="drawing-bond" aria-label="결합 종류"><option value="1">단일결합</option><option value="2">이중결합</option><option value="3">삼중결합</option></select><button data-tool="atom" aria-pressed="false">원자</button><select id="drawing-element" aria-label="원자 종류">${['C','N','O','S','P','F','Cl','Br','I','H','Si','B','R'].map(e=>`<option>${e}</option>`).join('')}</select><button data-tool="ring" aria-pressed="false">고리</button><select id="drawing-ring" aria-label="고리 종류"><option value="6">육각고리</option><option value="benzene">벤젠고리</option><option value="5">오각고리</option></select></div>
-      <div class="drawing-toolset"><button id="drawing-pen" data-tool="pen" aria-pressed="false">펜</button><button data-tool="arrow" aria-pressed="false">화살표</button><button data-tool="text" aria-pressed="false">설명</button><button data-tool="move" aria-pressed="false">이동</button><button data-tool="erase" aria-pressed="false">지우개</button><input id="drawing-color" type="color" value="#bd4335" aria-label="펜·화살표·설명 색상"></div>
+      <div class="drawing-toolset"><button id="drawing-pen" data-tool="pen" aria-pressed="false">펜</button><label class="drawing-shape-label" id="drawing-shape-label">도형 <select id="drawing-shape" aria-label="스케치 도형"><option value="">선택</option><option value="line">직선</option><option value="dashed">점선</option><option value="circle">원</option><option value="rectangle">사각형</option><option value="triangle">삼각형</option><option value="roundedRectangle">모서리 둥근 사각형</option><option value="roundedTriangle">모서리 둥근 삼각형</option><option value="textbox">텍스트 상자</option></select></label><button data-tool="arrow" aria-pressed="false">화살표</button><button data-tool="text" aria-pressed="false">설명</button><button data-tool="move" aria-pressed="false">이동</button><button data-tool="erase" aria-pressed="false">지우개</button><input id="drawing-color" type="color" value="#bd4335" aria-label="펜·화살표·설명 색상"></div>
       <span class="drawing-separator"></span><button id="drawing-undo" aria-label="그림 실행 취소">↶ 취소</button><button id="drawing-redo" aria-label="그림 다시 실행">↷ 다시</button>
-    </div><div class="drawing-text-row" id="drawing-text-row" hidden><input id="drawing-text" maxlength="300" placeholder="설명을 입력하고 그림에서 넣을 위치를 누르세요." aria-label="그림에 넣을 설명"></div>
+    </div><div class="drawing-text-row" id="drawing-text-row" hidden><input id="drawing-text" maxlength="300" placeholder="설명을 입력하고 그림에서 넣을 위치를 누르세요." aria-label="그림에 넣을 설명"></div><div class="drawing-text-row" id="drawing-textbox-row" hidden><textarea id="drawing-textbox" maxlength="300" rows="2" placeholder="텍스트를 입력하고 그림에서 상자 크기를 드래그하세요." aria-label="텍스트 상자 내용"></textarea></div>
     <div class="drawing-viewbar"><button id="drawing-zoom-out" aria-label="작업지 축소">−</button><output id="drawing-zoom-level">100%</output><button id="drawing-zoom-in" aria-label="작업지 확대">＋</button><button id="drawing-fit">전체 보기</button><button id="drawing-actual">100%</button><button data-tool="pan" aria-pressed="false">손으로 이동</button><button id="drawing-grow">작업지 넓히기</button><span id="drawing-size"></span></div>
     <p class="drawing-source" id="drawing-source"></p><div class="drawing-workspace" id="drawing-workspace"><div id="drawing-stage"><canvas id="drawing-canvas" tabindex="0" aria-label="그림 작업 공간. 선택한 도구로 드래그하거나 클릭하세요."></canvas></div></div>
     <footer class="drawing-foot"><p id="drawing-hint"></p><button id="drawing-save" class="primary-button">노트에 넣기</button></footer><p id="drawing-status" role="status" aria-live="polite"></p></div>`;
   document.body.append(dialog);
   $('drawing-close').onclick=closeDrawing;
   dialog.addEventListener('cancel',e=>{e.preventDefault();if(drawingSession?.gesture){cancelDrawingGesture();return}if(drawingSelectionCount(drawingSession?.selection)){clearDrawingSelection();return}closeDrawing()});
-  dialog.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>openDrawing(b.dataset.mode,drawingSession.section));
+  dialog.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>openDrawing(b.dataset.mode,drawingSession.section,null,drawingSession.blockId));
   dialog.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>selectDrawingTool(b.dataset.tool));
   $('drawing-element').onchange=()=>selectDrawingTool('atom');$('drawing-bond').onchange=()=>selectDrawingTool('bond');$('drawing-ring').onchange=()=>selectDrawingTool('ring');
+  $('drawing-shape').onchange=()=>{if($('drawing-shape').value)selectDrawingTool($('drawing-shape').value)};
   $('drawing-undo').onclick=()=>drawingUndo(false);$('drawing-redo').onclick=()=>drawingUndo(true);$('drawing-save').onclick=saveDrawing;
   const repeat=document.createElement('button');repeat.dataset.tool='repeat';repeat.textContent='[ ]ₙ 반복단위';repeat.setAttribute('aria-pressed','false');repeat.onclick=()=>selectDrawingTool('repeat');$('drawing-chem-tools').append(repeat);
   const lasso=document.createElement('button');lasso.dataset.tool='lasso';lasso.textContent='올가미';lasso.setAttribute('aria-pressed','false');lasso.onclick=()=>selectDrawingTool('lasso');dialog.querySelector('[data-tool=move]').before(lasso);
@@ -33,11 +35,11 @@ function ensureDrawingDialog(){
   new ResizeObserver(()=>{if(drawingSession?.doc&&!drawingSession.loading){layoutDrawingView();if(drawingSession.fitted)fitDrawingView()}}).observe($('drawing-workspace'));
   const canvas=$('drawing-canvas');canvas.onpointerdown=drawingPointerDown;canvas.onpointermove=drawingPointerMove;canvas.onpointerup=drawingPointerUp;canvas.onpointercancel=cancelDrawingGesture;
   canvas.onpointerleave=()=>{if(drawingSession&&!drawingSession.gesture){drawingSession.hover=null;renderDrawing()}};
-  dialog.addEventListener('keydown',e=>{if(e.target.matches('input,select'))return;if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();drawingUndo(e.key.toLowerCase()==='y'||e.shiftKey)}});
+  dialog.addEventListener('keydown',e=>{if(e.target.matches('input,select,textarea'))return;if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();drawingUndo(e.key.toLowerCase()==='y'||e.shiftKey)}});
 }
-function openDrawingChooser(section){
+function openDrawingChooser(section,blockId=null){
   if(!current||current.archived)return;ensureDrawingDialog();
-  drawingSession={section,experimentId:current.id,dirty:false};
+  drawingSession={section,blockId,experimentId:current.id,dirty:false};
   $('drawing-dialog').classList.remove('drawing-expanded');$('drawing-title').textContent='그림 추가';$('drawing-choice').hidden=false;$('drawing-editor').hidden=true;$('drawing-dialog').showModal();
 }
 function closeDrawing(){
@@ -45,9 +47,9 @@ function closeDrawing(){
   if(drawingSession?.dirty&&!confirm('저장하지 않은 그림을 닫을까요?'))return;
   drawingSession=null;$('drawing-dialog').close();
 }
-async function openDrawing(mode,section,file=null){
+async function openDrawing(mode,section,file=null,blockId=null){
   if(!current||current.archived)return;ensureDrawingDialog();
-  const s={section,experimentId:current.id,dirty:false,saving:false,loading:true,undo:[],redo:[],gesture:null,background:null,edited:mode==='edit',zoom:1,fitted:false};
+  const s={section,blockId:blockId||file?.block_id||null,experimentId:current.id,dirty:false,saving:false,loading:true,undo:[],redo:[],gesture:null,background:null,edited:mode==='edit',zoom:1,fitted:false};
   $('drawing-dialog').classList.add('drawing-expanded');
   drawingSession=s;$('drawing-choice').hidden=true;$('drawing-editor').hidden=false;$('drawing-status').textContent='그림을 준비하고 있습니다…';$('drawing-save').disabled=true;
   if(!$('drawing-dialog').open)$('drawing-dialog').showModal();
@@ -56,7 +58,7 @@ async function openDrawing(mode,section,file=null){
     if(s.doc.mode==='photo')await loadDrawingBackground(s);
     if(drawingSession!==s)return;
     $('drawing-title').textContent={molecule:'분자구조 그리기',sketch:'간단한 스케치',photo:'사진에 화살표·설명'}[s.doc.mode];
-    $('drawing-chem-tools').hidden=s.doc.mode!=='molecule';$('drawing-pen').hidden=s.doc.mode==='molecule';
+    $('drawing-chem-tools').hidden=s.doc.mode!=='molecule';$('drawing-pen').hidden=s.doc.mode==='molecule';$('drawing-shape-label').hidden=s.doc.mode!=='sketch';
     $('drawing-source').textContent=s.doc.mode==='photo'?'원본은 그대로 두고, 주석이 있는 사본을 저장합니다. 선택한 사진 영역만 표시합니다.':s.doc.mode==='molecule'?'기본 구조식 편집기 · 탄소와 탄소에 결합한 수소는 생략됩니다. 화학적 타당성·입체구조 자동 검증은 지원하지 않습니다.':'이 컴퓨터에서 직접 그린 그림입니다.';
     $('drawing-save').textContent=s.edited||s.doc.mode==='photo'?'사본으로 노트에 넣기':'노트에 넣기';
     $('drawing-color').value=s.doc.mode==='molecule'?'#23392e':'#bd4335';$('drawing-repeat-count').value='n';
@@ -103,13 +105,15 @@ function selectDrawingTool(tool){
   const s=drawingSession;if(!s?.doc||s.loading||s.saving)return;if(s.gesture)cancelDrawingGesture();s.tool=tool;s.hover=null;if(!['lasso','move','pan'].includes(tool))s.selection=null;
   document.querySelectorAll('#drawing-dialog [data-tool]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tool===tool)));
   $('drawing-text-row').hidden=tool!=='text';
+  $('drawing-textbox-row').hidden=tool!=='textbox';$('drawing-shape').value=drawingShapeTools.has(tool)?tool:'';$('drawing-shape-label').classList.toggle('active',drawingShapeTools.has(tool));
   $('drawing-repeat-row').hidden=tool!=='repeat';
-  $('drawing-hint').textContent={bond:'빈 곳이나 원자에서 드래그해 결합을 만드세요. 기존 결합을 누르면 선택한 결합 종류로 바뀝니다.',atom:'빈 곳을 누르면 원자가 생겨요. 기존 원자를 누르면 선택한 원자로 바뀝니다.',ring:'결합 끝에 마우스를 대면 붙을 고리가 보여요. 클릭하면 연결되고, 드래그하면 방향을 정할 수 있어요. 빈 곳에는 새 고리가 생깁니다.',pen:'마우스나 손가락으로 그리세요. 저장한 그림은 기본적으로 🔒 AI 사용 금지입니다.',arrow:'강조할 방향으로 드래그하세요. 사진 원본에는 영향을 주지 않습니다.',text:'위에 설명을 입력한 뒤, 그림에서 넣을 위치를 누르세요.',move:'원자나 설명·화살표·선을 잡고 옮기세요.',pan:'작업지를 잡고 끌어 이동하세요. 그림 자체는 바뀌지 않습니다. Ctrl + 휠로 확대·축소할 수 있어요.',erase:'원자·결합·그린 선·설명을 눌러 지우세요. 원본 사진은 지워지지 않습니다.'}[tool];
+  $('drawing-hint').textContent={bond:'빈 곳이나 원자에서 드래그해 결합을 만드세요. 기존 결합을 누르면 선택한 결합 종류로 바뀝니다.',atom:'빈 곳을 누르면 원자가 생겨요. 기존 원자를 누르면 선택한 원자로 바뀝니다.',ring:'결합 끝에 마우스를 대면 붙을 고리가 보여요. 클릭하면 연결되고, 드래그하면 방향을 정할 수 있어요. 빈 곳에는 새 고리가 생깁니다.',pen:'마우스나 손가락으로 그리세요. 저장한 그림은 기본적으로 🔒 AI 사용 금지입니다.',arrow:'강조할 방향으로 드래그하세요. 사진 원본에는 영향을 주지 않습니다.',text:'위에 설명을 입력한 뒤, 그림에서 넣을 위치를 누르세요.',textbox:'위에 텍스트를 입력한 뒤, 상자를 놓을 영역을 드래그하세요.',move:'원자나 설명·화살표·선을 잡고 옮기세요.',pan:'작업지를 잡고 끌어 이동하세요. 그림 자체는 바뀌지 않습니다. Ctrl + 휠로 확대·축소할 수 있어요.',erase:'원자·결합·그린 선·설명을 눌러 지우세요. 원본 사진은 지워지지 않습니다.'}[tool]||'시작점에서 끝점까지 드래그해 도형을 그리세요.';
   $('drawing-canvas').style.cursor=tool==='pan'?'grab':'crosshair';
   if(tool==='repeat')$('drawing-hint').textContent='반복 단위의 왼쪽 위에서 오른쪽 아래로 드래그하세요. 대괄호와 n이 함께 생깁니다.';
   if(tool==='lasso')$('drawing-hint').textContent='옮길 부분을 자유롭게 둘러싸세요. 선택 안쪽을 끌면 함께 이동하고, 색상을 바꾸면 선택한 부분에 적용돼요. 한 항목은 클릭으로 선택할 수 있어요.';
   renderDrawing();
   if(tool==='text')$('drawing-text').focus();
+  if(tool==='textbox')$('drawing-textbox').focus();
 }
 function drawingPoint(e){const c=$('drawing-canvas'),r=c.getBoundingClientRect(),d=drawingSession.doc;return{x:Math.max(0,Math.min(d.width,(e.clientX-r.left)/r.width*d.width)),y:Math.max(0,Math.min(d.height,(e.clientY-r.top)/r.height*d.height))}}
 function drawingDistance(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
@@ -143,10 +147,31 @@ function addDrawingRing(doc,placement,value,color='#23392e'){
   ids.forEach((a,i)=>doc.bonds.push({a,b:ids[(i+1)%ids.length],order:value==='benzene'&&i%2===0?2:1,color}));return true;
 }
 function drawingLineDistance(p,a,b){const l=(b.x-a.x)**2+(b.y-a.y)**2,t=l?Math.max(0,Math.min(1,((p.x-a.x)*(b.x-a.x)+(p.y-a.y)*(b.y-a.y))/l)):0;return drawingDistance(p,{x:a.x+t*(b.x-a.x),y:a.y+t*(b.y-a.y)})}
+function drawingShapeBounds(mark){
+  const [a,b]=mark.points,left=Math.min(a.x,b.x),top=Math.min(a.y,b.y),width=Math.abs(b.x-a.x),height=Math.abs(b.y-a.y);
+  if(mark.kind==='circle'){const size=Math.min(width,height);return{left:a.x<=b.x?a.x:a.x-size,top:a.y<=b.y?a.y:a.y-size,right:(a.x<=b.x?a.x:a.x-size)+size,bottom:(a.y<=b.y?a.y:a.y-size)+size}}
+  return{left,top,right:Math.max(a.x,b.x),bottom:Math.max(a.y,b.y)};
+}
+function drawingShapeVertices(mark){const b=drawingShapeBounds(mark),cx=(b.left+b.right)/2;return[{x:cx,y:b.top},{x:b.right,y:b.bottom},{x:b.left,y:b.bottom}]}
+function drawingTextBoxLayout(mark){
+  const b=drawingShapeBounds(mark),width=Math.max(120,b.right-b.left),ctx=typeof document==='undefined'?null:$('drawing-canvas').getContext('2d');
+  const lines=[];if(ctx){ctx.save();ctx.font='22px sans-serif'}
+  for(const paragraph of mark.text.split('\n')){let line='';for(const character of paragraph){const next=line+character;if(line&&(ctx?ctx.measureText(next).width:next.length*12)>width-20){lines.push(line);line=character}else line=next}lines.push(line)}
+  if(ctx)ctx.restore();return{left:b.left,top:b.top,right:b.left+width,bottom:b.top+Math.max(48,b.bottom-b.top,lines.length*28+20),lines};
+}
+function drawingShapeHit(mark,p){
+  const b=mark.kind==='textbox'?drawingTextBoxLayout(mark):drawingShapeBounds(mark),a=mark.points[0],z=mark.points[1];
+  if(mark.kind==='line'||mark.kind==='dashed')return drawingLineDistance(p,a,z)<12;
+  if(mark.kind==='textbox')return drawingPointInBounds(p,b,2);
+  if(mark.kind==='circle'){const rx=(b.right-b.left)/2,ry=(b.bottom-b.top)/2;if(rx<1||ry<1)return false;const distance=Math.hypot((p.x-b.left-rx)/rx,(p.y-b.top-ry)/ry);return Math.abs(distance-1)*rx<12}
+  const vertices=mark.kind.includes('Triangle')||mark.kind==='triangle'?drawingShapeVertices(mark):[{x:b.left,y:b.top},{x:b.right,y:b.top},{x:b.right,y:b.bottom},{x:b.left,y:b.bottom}];
+  return vertices.some((v,i)=>drawingLineDistance(p,v,vertices[(i+1)%vertices.length])<14);
+}
 function drawingHit(p){
   const d=drawingSession.doc;
   for(let i=d.marks.length-1;i>=0;i--){const m=d.marks[i];if(m.kind==='text'){const ctx=$('drawing-canvas').getContext('2d');ctx.font='26px sans-serif';if(p.x>=m.points[0].x-8&&p.x<=m.points[0].x+ctx.measureText(m.text).width+8&&Math.abs(p.y-m.points[0].y)<30)return{kind:'mark',i}}
     else if(m.kind==='repeat'){if(drawingRepeatHit(m,p))return{kind:'mark',i}}
+    else if(drawingShapeTools.has(m.kind)){if(drawingShapeHit(m,p))return{kind:'mark',i}}
     else if(m.points.some((a,j)=>drawingLineDistance(p,a,m.points[Math.max(0,j-1)])<14))return{kind:'mark',i};}
   const i=drawingAtomAt(p);if(i>=0)return{kind:'atom',i};
   const j=d.bonds.findIndex(b=>drawingLineDistance(p,d.atoms[b.a],d.atoms[b.b])<12);return j>=0?{kind:'bond',i:j}:null;
@@ -162,6 +187,7 @@ function drawingPointerDown(e){
   if(s.tool==='lasso'){s.selection=null;s.gesture.lasso=[p];renderDrawing();return}
   if(s.tool==='repeat'){const text=$('drawing-repeat-count').value.trim();if(!/^[A-Za-z0-9]{1,12}$/.test(text)){$('drawing-status').textContent='반복수는 n, m, 10처럼 영문·숫자 1~12자로 입력해 주세요.';s.gesture.invalid=true;return}d.marks.push({kind:'repeat',color,points:[p,p],text});s.gesture.mark=d.marks.at(-1)}
   if(s.tool==='pen'||s.tool==='arrow'){d.marks.push({kind:s.tool,color,points:[p],text:''});s.gesture.mark=d.marks.at(-1)}
+  if(drawingShapeTools.has(s.tool)){const text=s.tool==='textbox'?$('drawing-textbox').value.trim():'';if(s.tool==='textbox'&&!text){$('drawing-status').textContent='텍스트 상자 내용을 먼저 입력해 주세요.';s.gesture.invalid=true}else{d.marks.push({kind:s.tool,color,points:[p,p],text});s.gesture.mark=d.marks.at(-1)}}
   if(s.tool==='text'){const text=$('drawing-text').value.trim();if(text)d.marks.push({kind:'text',color,points:[p],text});else $('drawing-status').textContent='설명을 먼저 입력해 주세요.'}
   if(s.tool==='atom'){const i=drawingAtomAt(p),label=$('drawing-element').value;if(i>=0)Object.assign(d.atoms[i],{label,color});else d.atoms.push({...p,label,color})}
   if(s.tool==='erase'&&hit){if(hit.kind==='mark')d.marks.splice(hit.i,1);if(hit.kind==='bond')d.bonds.splice(hit.i,1);if(hit.kind==='atom'){d.atoms.splice(hit.i,1);d.bonds=d.bonds.filter(b=>b.a!==hit.i&&b.b!==hit.i).map(b=>({...b,a:b.a>hit.i?b.a-1:b.a,b:b.b>hit.i?b.b-1:b.b}))}}
@@ -177,7 +203,8 @@ function drawingPointerMove(e){
   if(s.tool==='repeat')g.mark.points=constrainDrawingRepeat(g.start,p,g.mark.text,s.doc);
   if(s.tool==='pen'&&g.mark.points.length<10000&&drawingDistance(p,g.mark.points.at(-1))>1)g.mark.points.push(p);
   if(s.tool==='arrow')g.mark.points=[g.start,p];
-  if(s.tool==='move'&&g.hit){const dx=p.x-g.start.x,dy=p.y-g.start.y;if(g.hit.kind==='atom'){const a=g.before.atoms[g.hit.i];Object.assign(s.doc.atoms[g.hit.i],{x:Math.max(0,Math.min(s.doc.width,a.x+dx)),y:Math.max(0,Math.min(s.doc.height,a.y+dy))})}if(g.hit.kind==='mark'){s.doc.marks[g.hit.i].points=g.before.marks[g.hit.i].points.map(a=>({x:Math.max(0,Math.min(s.doc.width,a.x+dx)),y:Math.max(0,Math.min(s.doc.height,a.y+dy))}))}}
+  if(drawingShapeTools.has(s.tool)&&g.mark)g.mark.points=[g.start,p];
+  if(s.tool==='move'&&g.hit){const dx=p.x-g.start.x,dy=p.y-g.start.y;if(g.hit.kind==='atom'){const a=g.before.atoms[g.hit.i];Object.assign(s.doc.atoms[g.hit.i],{x:Math.max(0,Math.min(s.doc.width,a.x+dx)),y:Math.max(0,Math.min(s.doc.height,a.y+dy))})}if(g.hit.kind==='mark'){const before=g.before.marks[g.hit.i],bounds=drawingBounds(drawingMarkExtent(before)),x=Math.max(-bounds.left,Math.min(s.doc.width-bounds.right,dx)),y=Math.max(-bounds.top,Math.min(s.doc.height-bounds.bottom,dy));s.doc.marks[g.hit.i].points=before.points.map(a=>({x:a.x+x,y:a.y+y}))}}
   renderDrawing();
 }
 function drawingBondEnd(start,end){const angle=Math.round(Math.atan2(end.y-start.y,end.x-start.x)/(Math.PI/6))*Math.PI/6;return{x:start.x+64*Math.cos(angle),y:start.y+64*Math.sin(angle)}}
@@ -202,6 +229,7 @@ function drawingPointerUp(e){
     else if(drawingDistance(g.start,g.end)>=8){let a=drawingAtomAt(g.start);if(a<0){a=d.atoms.length;d.atoms.push({...g.start,label:'C',color})}let b=drawingAtomAt(g.end);if(b<0){const end=drawingBondEnd(d.atoms[a],g.end);if(end.x>=0&&end.x<=d.width&&end.y>=0&&end.y<=d.height){b=drawingAtomAt(end);if(b<0){b=d.atoms.length;d.atoms.push({...end,label:'C',color})}}}if(b>=0&&a!==b){const bond=d.bonds.find(v=>v.a===a&&v.b===b||v.a===b&&v.b===a);if(bond)Object.assign(bond,{order:Number($('drawing-bond').value),color});else d.bonds.push({a,b,order:Number($('drawing-bond').value),color})}}
   }
   if(s.tool==='arrow'&&drawingDistance(g.start,g.end)<5)d.marks.pop();
+  if(drawingShapeTools.has(s.tool)&&g.mark){if(s.tool==='textbox'&&drawingDistance(g.start,g.end)<5)g.mark.points=[g.start,{x:Math.min(d.width,g.start.x+220),y:Math.min(d.height,g.start.y+80)}];else if(drawingDistance(g.start,g.end)<5||!['line','dashed'].includes(s.tool)&&(Math.abs(g.start.x-g.end.x)<8||Math.abs(g.start.y-g.end.y)<8))d.marks.pop();if(s.tool==='textbox'&&d.marks.at(-1)===g.mark){const bounds=drawingBounds(drawingMarkExtent(g.mark));if(bounds.right-bounds.left>d.width||bounds.bottom-bounds.top>d.height){d.marks.pop();$('drawing-status').textContent='텍스트가 작업지보다 깁니다. 내용을 줄이거나 상자를 넓혀 주세요.'}else{const dx=Math.max(-bounds.left,Math.min(0,d.width-bounds.right)),dy=Math.max(-bounds.top,Math.min(0,d.height-bounds.bottom));g.mark.points=g.mark.points.map(p=>({x:p.x+dx,y:p.y+dy}))}}}
   if($('drawing-canvas').hasPointerCapture(e.pointerId))$('drawing-canvas').releasePointerCapture(e.pointerId);
   s.gesture=null;s.hover=null;$('drawing-canvas').style.cursor=drawingSelectionCount(s.selection)?'grab':'crosshair';drawingRemember(g.before);renderDrawing();
 }
@@ -213,7 +241,19 @@ function paintDrawing(ctx,d,background){
   ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='25px sans-serif';
   d.atoms.forEach((a,i)=>{if(a.label==='C'&&d.bonds.some(b=>b.a===i||b.b===i))return;const w=ctx.measureText(a.label).width;ctx.fillStyle='#ffffff';ctx.fillRect(a.x-w/2-3,a.y-15,w+6,30);ctx.fillStyle=a.color||{O:'#b43d36',N:'#355bae',S:'#946818'}[a.label]||'#23392e';ctx.fillText(a.label,a.x,a.y)});
   ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.font='26px sans-serif';
-  for(const m of d.marks){ctx.strokeStyle=m.color;ctx.fillStyle=m.color;ctx.lineWidth=3;const p=m.points[0];if(m.kind==='repeat'){paintDrawingRepeat(ctx,m);continue}if(m.kind==='text'){ctx.save();ctx.strokeStyle='white';ctx.lineWidth=5;ctx.strokeText(m.text,p.x,p.y);ctx.fillText(m.text,p.x,p.y);ctx.restore();continue}ctx.beginPath();ctx.moveTo(p.x,p.y);for(const v of m.points)ctx.lineTo(v.x,v.y);ctx.stroke();if(m.points.length===1){ctx.beginPath();ctx.arc(p.x,p.y,1.5,0,Math.PI*2);ctx.fill()}if(m.kind==='arrow'&&m.points.length>1){const z=m.points.at(-1),angle=Math.atan2(z.y-p.y,z.x-p.x);ctx.beginPath();ctx.moveTo(z.x,z.y);ctx.lineTo(z.x-17*Math.cos(angle-.45),z.y-17*Math.sin(angle-.45));ctx.lineTo(z.x-17*Math.cos(angle+.45),z.y-17*Math.sin(angle+.45));ctx.closePath();ctx.fill()}}
+  for(const m of d.marks){ctx.strokeStyle=m.color;ctx.fillStyle=m.color;ctx.lineWidth=3;const p=m.points[0];if(m.kind==='repeat'){paintDrawingRepeat(ctx,m);continue}if(m.kind==='text'){ctx.save();ctx.strokeStyle='white';ctx.lineWidth=5;ctx.strokeText(m.text,p.x,p.y);ctx.fillText(m.text,p.x,p.y);ctx.restore();continue}if(drawingShapeTools.has(m.kind)){paintDrawingShape(ctx,m);continue}ctx.beginPath();ctx.moveTo(p.x,p.y);for(const v of m.points)ctx.lineTo(v.x,v.y);ctx.stroke();if(m.points.length===1){ctx.beginPath();ctx.arc(p.x,p.y,1.5,0,Math.PI*2);ctx.fill()}if(m.kind==='arrow'&&m.points.length>1){const z=m.points.at(-1),angle=Math.atan2(z.y-p.y,z.x-p.x);ctx.beginPath();ctx.moveTo(z.x,z.y);ctx.lineTo(z.x-17*Math.cos(angle-.45),z.y-17*Math.sin(angle-.45));ctx.lineTo(z.x-17*Math.cos(angle+.45),z.y-17*Math.sin(angle+.45));ctx.closePath();ctx.fill()}}
+}
+function paintDrawingShape(ctx,mark){
+  const kind=mark.kind,b=kind==='textbox'?drawingTextBoxLayout(mark):drawingShapeBounds(mark);ctx.save();ctx.strokeStyle=mark.color;ctx.fillStyle=mark.color;ctx.lineWidth=3;
+  if(kind==='line'||kind==='dashed'){if(kind==='dashed')ctx.setLineDash([9,7]);ctx.beginPath();ctx.moveTo(mark.points[0].x,mark.points[0].y);ctx.lineTo(mark.points[1].x,mark.points[1].y);ctx.stroke()}
+  else if(kind==='circle'){const radius=(b.right-b.left)/2;if(radius>0){ctx.beginPath();ctx.arc(b.left+radius,b.top+radius,radius,0,Math.PI*2);ctx.stroke()}}
+  else{
+    const vertices=kind==='triangle'||kind==='roundedTriangle'?drawingShapeVertices(mark):[{x:b.left,y:b.top},{x:b.right,y:b.top},{x:b.right,y:b.bottom},{x:b.left,y:b.bottom}];
+    const rounded=kind==='roundedRectangle'||kind==='roundedTriangle',radius=Math.min(18,(b.right-b.left)/5,(b.bottom-b.top)/5);ctx.beginPath();
+    if(rounded&&radius>0){vertices.forEach((v,i)=>{const prev=vertices[(i+vertices.length-1)%vertices.length],next=vertices[(i+1)%vertices.length],to=(other)=>{const length=drawingDistance(v,other)||1,amount=Math.min(radius,length/3);return{x:v.x+(other.x-v.x)*amount/length,y:v.y+(other.y-v.y)*amount/length}};const entry=to(prev),exit=to(next);if(i===0)ctx.moveTo(entry.x,entry.y);else ctx.lineTo(entry.x,entry.y);ctx.quadraticCurveTo(v.x,v.y,exit.x,exit.y)})}
+    else vertices.forEach((v,i)=>i?ctx.lineTo(v.x,v.y):ctx.moveTo(v.x,v.y));ctx.closePath();ctx.stroke();
+    if(kind==='textbox'){ctx.font='22px sans-serif';ctx.textAlign='left';ctx.textBaseline='top';b.lines.forEach((line,i)=>ctx.fillText(line,b.left+10,b.top+10+i*28))}
+  }ctx.restore();
 }
 function renderDrawing(){
   const s=drawingSession;if(!s?.doc)return;const ctx=$('drawing-canvas').getContext('2d');ctx.setTransform(s.pixelRatio||2,0,0,s.pixelRatio||2,0,0);paintDrawing(ctx,s.doc,s.background);
@@ -234,8 +274,8 @@ async function saveDrawing(){
   try{
     await persistRecordEdits();if(current?.id!==s.experimentId)throw new Error('열린 실험이 바뀌었습니다. 그림을 다시 열어 주세요.');
     const prefix={molecule:'분자구조',sketch:'스케치',photo:'사진 주석 사본'}[s.doc.mode];
-    const result=await api(`/api/experiments/${s.experimentId}/drawings`,'POST',{section_key:s.section,name:`${prefix} ${new Date().toLocaleTimeString('ko-KR',{hour12:false}).replaceAll(':','-')}.png`,data:exportDrawingImage(s),document:s.doc});
-    if(current?.id===s.experimentId){current=result;renderSections();turnToSection(s.section)}
+    const result=await api(`/api/experiments/${s.experimentId}/drawings`,'POST',{section_key:s.section,block_id:s.blockId,name:`${prefix} ${new Date().toLocaleTimeString('ko-KR',{hour12:false}).replaceAll(':','-')}.png`,data:exportDrawingImage(s),document:s.doc});
+    if(current?.id===s.experimentId){current=result;renderSections();turnToSection(s.blockId||s.section)}
     s.dirty=false;drawingSession=null;$('drawing-dialog').close();toast('그림을 저장했습니다. 🔒 AI 사용 금지로 보관됩니다.');
   }catch(error){s.saving=false;$('drawing-status').textContent=error.message;renderDrawing()}
 }
@@ -257,6 +297,7 @@ function drawingTextWidth(text,font='26px sans-serif'){
 function drawingMarkExtent(mark){
   if(mark.kind==='repeat'){const [a,b]=mark.points,right=b.x+8+drawingTextWidth(mark.text,'italic 24px serif'),bottom=b.y+18;return[a,{x:right,y:a.y},{x:right,y:bottom},{x:a.x,y:bottom}]}
   if(mark.kind==='text'){const p=mark.points[0];return[{x:p.x,y:p.y-28},{x:p.x+drawingTextWidth(mark.text),y:p.y+4}]}
+  if(drawingShapeTools.has(mark.kind)){const b=mark.kind==='textbox'?drawingTextBoxLayout(mark):drawingShapeBounds(mark);return[{x:b.left,y:b.top},{x:b.right,y:b.top},{x:b.right,y:b.bottom},{x:b.left,y:b.bottom}]}
   return mark.points;
 }
 function drawingBounds(points){return points.reduce((b,p)=>({left:Math.min(b.left,p.x),top:Math.min(b.top,p.y),right:Math.max(b.right,p.x),bottom:Math.max(b.bottom,p.y)}),{left:Infinity,top:Infinity,right:-Infinity,bottom:-Infinity})}

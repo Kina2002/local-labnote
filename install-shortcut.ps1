@@ -15,6 +15,7 @@ if ($exe) {
 $programs = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
 $appName = -join [char[]]@(0xC804, 0xC790, 0xB7A9, 0xB178, 0xD2B8)
 $shortcutPath = Join-Path $programs ($appName + '.lnk')
+$pinnedPath = Join-Path (Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar') ($appName + '.lnk')
 $temporaryPath = Join-Path $appDirectory 'shortcut-build.lnk'
 $shell = New-Object -ComObject WScript.Shell
 try {
@@ -28,10 +29,16 @@ try {
         throw 'Shortcut target was not saved.'
     }
     Copy-Item -LiteralPath $temporaryPath -Destination $shortcutPath -Force
+    if (Test-Path -LiteralPath $pinnedPath) {
+        Copy-Item -LiteralPath $temporaryPath -Destination $pinnedPath -Force
+    }
 } finally {
     Remove-Item -LiteralPath $temporaryPath -ErrorAction SilentlyContinue
 }
 if (-not $shell.CreateShortcut($shortcutPath).TargetPath) {
     throw 'Shortcut target could not be verified.'
+}
+if ((Test-Path -LiteralPath $pinnedPath) -and $shell.CreateShortcut($pinnedPath).TargetPath -ne $target) {
+    throw 'Pinned shortcut target could not be verified.'
 }
 Write-Output $shortcutPath

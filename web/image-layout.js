@@ -23,7 +23,7 @@ function attachImageLayout(item,file){
   applyImageLayout(item,file.display_width||100,file.display_align||'center');
   if(current.archived)return;
   const bar=document.createElement('div');bar.className='image-layout-bar';
-  if(file.editable_drawing){const edit=document.createElement('button');edit.type='button';edit.className='continue-drawing';edit.textContent='이어서 그리기';edit.onclick=()=>openDrawing('edit',file.section_key,file);bar.append(edit)}
+  if(file.editable_drawing){const edit=document.createElement('button');edit.type='button';edit.className='continue-drawing';edit.textContent='이어서 그리기';edit.onclick=()=>openDrawing('edit',file.section_key,file,file.block_id);bar.append(edit)}
   const details=document.createElement('details');details.className='image-layout-settings';details.dataset.imageSettings=file.id;
   const summary=document.createElement('summary');summary.textContent='배치·크기';details.append(summary);
   const controls=document.createElement('div');controls.className='image-layout-controls';
@@ -36,13 +36,13 @@ function attachImageLayout(item,file){
   select('그림 정렬',[['left','왼쪽'],['center','가운데'],['right','오른쪽']],file.display_align||'center',alignment=>changeImageLayout(file,{alignment}));
   select('본문 기준 위치',[['before','본문 위'],['after','본문 아래']],file.display_placement||'after',placement=>changeImageLayout(file,{placement}));
   const order=document.createElement('div');order.className='image-order-controls';
-  const siblings=current.attachments.filter(f=>f.section_key===file.section_key&&f.mime_type.startsWith('image/')&&f.display_placement===file.display_placement),index=siblings.findIndex(f=>f.id===file.id);
+  const siblings=current.attachments.filter(f=>f.section_key===file.section_key&&f.block_id===file.block_id&&f.mime_type.startsWith('image/')&&f.display_placement===file.display_placement),index=siblings.findIndex(f=>f.id===file.id);
   for(const [direction,label]of [[-1,'↑ 앞 그림으로'],[1,'↓ 뒤 그림으로']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.disabled=direction<0?index<=0:index===siblings.length-1;button.onclick=()=>changeImageLayout(file,{move:direction});order.append(button)}
   controls.append(order);details.append(controls);bar.append(details);
   const remove=document.createElement('button');remove.type='button';remove.className='remove-image';remove.textContent='삭제';remove.setAttribute('aria-label',`${file.original_name} 그림 삭제`);remove.onclick=()=>{remove.disabled=true;changeImageLayout(file,{removed:true}).finally(()=>remove.disabled=false)};bar.append(remove);item.append(bar);
 }
-function appendRemovedImages(block,key){
-  const files=(current.removed_attachments||[]).filter(f=>f.section_key===key);if(!files.length)return;
+function appendRemovedImages(block,key,blockId=null){
+  const files=(current.removed_attachments||[]).filter(f=>blockId?f.block_id===blockId:f.section_key===key&&!f.block_id);if(!files.length)return;
   const details=document.createElement('details');details.className='removed-images';const summary=document.createElement('summary');summary.textContent=`삭제한 그림 ${files.length}개`;details.append(summary);
   const note=document.createElement('p');note.textContent='노트에서 삭제된 그림입니다. 복원을 위해 파일은 이 컴퓨터에 보관됩니다.';details.append(note);
   for(const file of files){const row=document.createElement('div'),name=document.createElement('span'),restore=document.createElement('button');name.textContent=file.original_name;restore.textContent='복원';restore.type='button';restore.disabled=Boolean(current.archived);restore.onclick=()=>changeImageLayout(file,{removed:false});row.append(name,restore);details.append(row)}block.append(details);
